@@ -21,3 +21,7 @@ controller/release/controller-release.apk
 controller/release/output-metadata.json
 controller/release/baselineProfiles/0/controller-release.dm
 controller/release/baselineProfiles/1/controller-release.dm
+
+# Release signing (written by CI)
+keystore.properties
+*.jks
