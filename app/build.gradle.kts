@@ -65,6 +65,13 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 
+    // Compress native libs: GeckoView's would otherwise ship uncompressed (~215 MB APK)
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     applicationVariants.all {
         outputs.all {
             val outputImpl = this as com.android.build.gradle.internal.api.BaseVariantOutputImpl

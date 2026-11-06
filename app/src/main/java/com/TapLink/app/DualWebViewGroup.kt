@@ -37,6 +37,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.webkit.WebView
+import org.mozilla.geckoview.AllowOrDeny
+import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
 import android.widget.Button
@@ -145,8 +147,28 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             geckoSession?.reload() ?: super.reload()
         }
 
-        override fun dispatchTouchEvent(event: MotionEvent): Boolean =
-                geckoView?.dispatchTouchEvent(event) ?: super.dispatchTouchEvent(event)
+        override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+            val gecko = geckoView ?: return super.dispatchTouchEvent(event)
+            // The app's synthesized taps pass 1 as MotionEvent.obtain's metaState (meant as pointer
+            // count), i.e. Shift. WebView ignores it; Gecko turns it into a shift-click (new window).
+            val forwarded =
+                    if (event.metaState != 0 && event.pointerCount == 1) {
+                        MotionEvent.obtain(event.downTime, event.eventTime, event.action, event.x, event.y, 0)
+                                .apply { source = event.source }
+                    } else {
+                        event
+                    }
+            val handled = gecko.dispatchTouchEvent(forwarded)
+            if (event.actionMasked != MotionEvent.ACTION_MOVE) {
+                Log.d(
+                        "GeckoEngine",
+                        "touch action=${event.actionMasked} x=${event.x} y=${event.y} src=${event.source} " +
+                                "meta=${event.metaState} handled=$handled"
+                )
+            }
+            if (forwarded !== event) forwarded.recycle()
+            return handled
+        }
 
         override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean =
                 geckoView?.dispatchGenericMotionEvent(event) ?: super.dispatchGenericMotionEvent(event)
@@ -215,7 +237,21 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                         perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>,
                                         hasUserGesture: Boolean
                                 ) {
+                                    Log.d("GeckoEngine", "location $url")
                                     geckoUrl = url
+                                }
+
+                                override fun onLoadRequest(
+                                        session: GeckoSession,
+                                        request: GeckoSession.NavigationDelegate.LoadRequest
+                                ): GeckoResult<AllowOrDeny>? {
+                                    Log.d("GeckoEngine", "load request ${request.uri} target=${request.target}")
+                                    // No multi-session tabs yet: open new-window links in the current page
+                                    if (request.target == GeckoSession.NavigationDelegate.TARGET_WINDOW_NEW) {
+                                        session.loadUri(request.uri)
+                                        return GeckoResult.fromValue(AllowOrDeny.DENY)
+                                    }
+                                    return null
                                 }
 
                                 override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) {
@@ -224,6 +260,16 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
                                 override fun onCanGoForward(session: GeckoSession, canGoForward: Boolean) {
                                     geckoCanGoForward = canGoForward
+                                }
+                            }
+                    progressDelegate =
+                            object : GeckoSession.ProgressDelegate {
+                                override fun onPageStart(session: GeckoSession, url: String) {
+                                    Log.d("GeckoEngine", "page start $url")
+                                }
+
+                                override fun onPageStop(session: GeckoSession, success: Boolean) {
+                                    Log.d("GeckoEngine", "page stop success=$success")
                                 }
                             }
                     open(GeckoEngine.runtime(context))
