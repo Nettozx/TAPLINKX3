@@ -1,5 +1,7 @@
 package com.TapLinkX3.app
 
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.ValueCallback
@@ -16,6 +18,7 @@ import org.mozilla.geckoview.WebExtension
  * Used on the main thread, like WebView's equivalents.
  */
 class GeckoBridge : WebExtension.MessageDelegate, WebExtension.PortDelegate {
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var port: WebExtension.Port? = null
     private val pending = ArrayDeque<JSONObject>() // sent once the next page connects
     private val callbacks = HashMap<Int, ValueCallback<String>>()
@@ -31,6 +34,17 @@ class GeckoBridge : WebExtension.MessageDelegate, WebExtension.PortDelegate {
             val id = nextId++
             callbacks[id] = callback
             message.put("id", id)
+            // WebView always calls back (null on failure); callers rely on it, e.g. the tap's UP
+            // event is sent from the callback, so a script that never answers would wedge input.
+            mainHandler.postDelayed(
+                    {
+                        callbacks.remove(id)?.let {
+                            Log.w(TAG, "Script $id timed out (port=${port != null}): ${script.take(80)}")
+                            it.onReceiveValue("null")
+                        }
+                    },
+                    RESULT_TIMEOUT_MS
+            )
         }
         val current = port
         if (current != null) {
@@ -51,6 +65,7 @@ class GeckoBridge : WebExtension.MessageDelegate, WebExtension.PortDelegate {
     }
 
     override fun onConnect(port: WebExtension.Port) {
+        Log.d(TAG, "Page connected (${pending.size} pending)")
         this.port = port
         port.setDelegate(this)
         port.postMessage(interfacesMessage())
@@ -58,12 +73,14 @@ class GeckoBridge : WebExtension.MessageDelegate, WebExtension.PortDelegate {
     }
 
     override fun onDisconnect(port: WebExtension.Port) {
+        Log.d(TAG, "Page disconnected (current=${this.port === port})")
         if (this.port === port) this.port = null
     }
 
     override fun onPortMessage(message: Any, port: WebExtension.Port) {
         val json = message as? JSONObject ?: return
         when (json.optString("type")) {
+            "log" -> Log.d(TAG, "page: ${json.optString("text")}")
             "result" -> callbacks.remove(json.optInt("id"))?.onReceiveValue(json.optString("value", "null"))
             "call" -> invoke(json.optString("iface"), json.optString("method"), json.optJSONArray("args"))
         }
@@ -118,5 +135,6 @@ class GeckoBridge : WebExtension.MessageDelegate, WebExtension.PortDelegate {
     companion object {
         private const val TAG = "GeckoBridge"
         private const val MAX_PENDING = 50
+        private const val RESULT_TIMEOUT_MS = 1000L
     }
 }

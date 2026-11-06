@@ -20,6 +20,11 @@
     if (port) port.postMessage(message);
   }
 
+  // Shows up in the app's logcat (tag GeckoBridge)
+  function log(text) {
+    send({ type: "log", text: String(text) });
+  }
+
   function toPlainArg(value) {
     if (value === undefined || value === null) return null;
     const type = typeof value;
@@ -64,16 +69,23 @@
       const encoded = result === undefined ? undefined : stringify(result);
       if (encoded !== undefined) json = encoded;
     } catch (e) {
-      console.error("TapLink bridge: script failed:", e);
+      log("script " + id + " failed: " + e + " :: " + String(code).slice(0, 120));
     }
     if (id !== undefined && id !== null) send({ type: "result", id: id, value: json });
   }
 
   function onMessage(message) {
-    if (message.type === "interfaces") {
-      defineInterfaces(message.defs);
-    } else if (message.type === "eval") {
-      evaluate(message.id, message.code);
+    try {
+      if (message.type === "interfaces") {
+        defineInterfaces(message.defs);
+      } else if (message.type === "eval") {
+        evaluate(message.id, message.code);
+      }
+    } catch (e) {
+      log("message " + message.type + " failed: " + e);
+      if (message.type === "eval" && message.id !== undefined && message.id !== null) {
+        send({ type: "result", id: message.id, value: "null" });
+      }
     }
   }
 
@@ -90,6 +102,7 @@
       port = null;
       retry();
     });
+    log("connected " + location.href.slice(0, 120));
   }
 
   // The app registers its side shortly after startup; early pages retry until it's there.
