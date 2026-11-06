@@ -147,8 +147,19 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             geckoSession?.reload() ?: super.reload()
         }
 
+        // MainActivity's listener blocks real touchpad touches (cursor/scroll/keyboard modes) and only
+        // lets its synthesized events through; apply it before forwarding, as View.dispatchTouchEvent would.
+        var touchListener: OnTouchListener? = null
+            private set
+
+        override fun setOnTouchListener(l: OnTouchListener?) {
+            touchListener = l
+            super.setOnTouchListener(l)
+        }
+
         override fun dispatchTouchEvent(event: MotionEvent): Boolean {
             val gecko = geckoView ?: return super.dispatchTouchEvent(event)
+            if (touchListener?.onTouch(this, event) == true) return true
             // The app's synthesized taps pass 1 as MotionEvent.obtain's metaState (meant as pointer
             // count), i.e. Shift. WebView ignores it; Gecko turns it into a shift-click (new window).
             val forwarded =
@@ -158,7 +169,13 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     } else {
                         event
                     }
-            val handled = gecko.dispatchTouchEvent(forwarded)
+            forwardingToGecko = true
+            val handled =
+                    try {
+                        gecko.dispatchTouchEvent(forwarded)
+                    } finally {
+                        forwardingToGecko = false
+                    }
             if (event.actionMasked != MotionEvent.ACTION_MOVE) {
                 Log.d(
                         "GeckoEngine",
@@ -225,6 +242,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private var geckoUrl: String? = null
     private var geckoCanGoBack = false
     private var geckoCanGoForward = false
+    private var forwardingToGecko = false
 
     private val geckoSession: GeckoSession? =
             if (GeckoEngine.isEnabled(context)) {
@@ -284,6 +302,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 GeckoView(context).apply {
                     setViewBackend(GeckoView.BACKEND_TEXTURE_VIEW)
                     setSession(session)
+                    // Real touchpad touches land here directly (it's on top of the tabs): filter them
+                    // through the active tab's MainActivity listener like the WebView did. Events the
+                    // app forwards via InternalWebView have already been filtered.
+                    setOnTouchListener { _, event -> !forwardingToGecko && activeTabBlocksTouch(event) }
                     elevation = 10f // above the (now empty) tab WebViews
                     // Debug URL from the launch intent; after tab restore, which loads the saved URL
                     GeckoEngine.pendingUrl?.let { url ->
@@ -300,6 +322,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     init {
         attachGeckoView()
     }
+
+    private fun activeTabBlocksTouch(event: MotionEvent): Boolean =
+            webView.touchListener?.onTouch(webView, event) == true
 
     /** (Re)adds the GeckoView on top of the tabs; tab restore clears webViewsContainer. */
     private fun attachGeckoView() {
