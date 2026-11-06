@@ -15,7 +15,8 @@ fragmentKtx = "1.8.6"
 recyclerview = "1.4.0"
 coroutines = "1.10.0"
 gson = "2.11.0"
-geckoview = "159.0.20261102144711"
+# 154+ need compileSdk 37 (AGP 9); stay on 153 until AGP is upgraded
+geckoview = "153.0.20260810162159"
 zxingEmbedded = "4.3.0"
 
 [libraries]
