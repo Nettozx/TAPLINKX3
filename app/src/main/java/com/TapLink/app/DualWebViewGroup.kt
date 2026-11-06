@@ -364,7 +364,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                         android.os.Handler(android.os.Looper.getMainLooper())
                                 .postDelayed({
                                     Log.d("GeckoEngine", "debug url ${url.take(80)}")
-                                    session.loadUri(url)
+                                    session.loadUri(GeckoEngine.toGeckoUri(url))
                                 }, 3000)
                     }
                 }
