@@ -290,6 +290,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                             FrameLayout.LayoutParams.MATCH_PARENT,
                             FrameLayout.LayoutParams.MATCH_PARENT
                     )
+                    // Debug URL from the launch intent; after tab restore, which loads the saved URL
+                    GeckoEngine.pendingUrl?.let { url ->
+                        GeckoEngine.pendingUrl = null
+                        postDelayed({ session.loadUri(url) }, 3000)
+                    }
                 }
             }
 
