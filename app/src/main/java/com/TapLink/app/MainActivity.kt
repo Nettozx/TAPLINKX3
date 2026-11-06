@@ -531,6 +531,8 @@ class MainActivity :
     @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility", "DEPRECATION")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Before the views are inflated: DualWebViewGroup reads it when it's created
+        GeckoEngine.applyIntentToggle(this, intent)
         // Set window background to black immediately
         window.setBackgroundDrawableResource(android.R.color.black)
 

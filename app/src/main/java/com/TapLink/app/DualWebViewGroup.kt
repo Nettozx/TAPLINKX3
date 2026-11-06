@@ -28,6 +28,7 @@ import android.view.Choreographer
 import android.view.GestureDetector
 import android.view.Gravity
 import android.view.LayoutInflater
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.PixelCopy
 import android.view.SurfaceHolder
@@ -36,6 +37,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.webkit.WebView
+import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.GeckoView
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -102,6 +105,54 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         fun getVerticalScrollRange() = super.computeVerticalScrollRange()
         fun getVerticalScrollExtent() = super.computeVerticalScrollExtent()
         fun getVerticalScrollOffset() = super.computeVerticalScrollOffset()
+
+        // Experimental GeckoView engine: the WebView stays as the tab's handle for the app's logic,
+        // but pages load in, and synthesized input goes to, the GeckoView on top of the tabs.
+        override fun loadUrl(url: String) {
+            val session = geckoSession
+            if (session != null && !url.startsWith("javascript:")) {
+                session.loadUri(GeckoEngine.toGeckoUri(url))
+            } else {
+                super.loadUrl(url)
+            }
+        }
+
+        override fun loadUrl(url: String, additionalHttpHeaders: Map<String, String>) {
+            val session = geckoSession
+            if (session != null && !url.startsWith("javascript:")) {
+                session.loadUri(GeckoEngine.toGeckoUri(url))
+            } else {
+                super.loadUrl(url, additionalHttpHeaders)
+            }
+        }
+
+        override fun getUrl(): String? = if (geckoSession != null) geckoUrl else super.getUrl()
+
+        override fun canGoBack(): Boolean = if (geckoSession != null) geckoCanGoBack else super.canGoBack()
+
+        override fun canGoForward(): Boolean =
+                if (geckoSession != null) geckoCanGoForward else super.canGoForward()
+
+        override fun goBack() {
+            geckoSession?.goBack() ?: super.goBack()
+        }
+
+        override fun goForward() {
+            geckoSession?.goForward() ?: super.goForward()
+        }
+
+        override fun reload() {
+            geckoSession?.reload() ?: super.reload()
+        }
+
+        override fun dispatchTouchEvent(event: MotionEvent): Boolean =
+                geckoView?.dispatchTouchEvent(event) ?: super.dispatchTouchEvent(event)
+
+        override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean =
+                geckoView?.dispatchGenericMotionEvent(event) ?: super.dispatchGenericMotionEvent(event)
+
+        override fun dispatchKeyEvent(event: KeyEvent): Boolean =
+                geckoView?.dispatchKeyEvent(event) ?: super.dispatchKeyEvent(event)
     }
 
     private val PREFS_NAME = "TapLinkPrefs"
@@ -147,6 +198,54 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     val webViewsContainer: FrameLayout =
             FrameLayout(context).apply { setBackgroundColor(Color.BLACK) }
+
+    // Experimental GeckoView engine (see GeckoEngine). A single session shared by all tabs for now.
+    private var geckoUrl: String? = null
+    private var geckoCanGoBack = false
+    private var geckoCanGoForward = false
+
+    private val geckoSession: GeckoSession? =
+            if (GeckoEngine.isEnabled(context)) {
+                GeckoSession().apply {
+                    navigationDelegate =
+                            object : GeckoSession.NavigationDelegate {
+                                override fun onLocationChange(
+                                        session: GeckoSession,
+                                        url: String?,
+                                        perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>,
+                                        hasUserGesture: Boolean
+                                ) {
+                                    geckoUrl = url
+                                }
+
+                                override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) {
+                                    geckoCanGoBack = canGoBack
+                                }
+
+                                override fun onCanGoForward(session: GeckoSession, canGoForward: Boolean) {
+                                    geckoCanGoForward = canGoForward
+                                }
+                            }
+                    open(GeckoEngine.runtime(context))
+                }
+            } else {
+                null
+            }
+
+    // TextureView backend: the right eye is mirrored with PixelCopy, which can't see SurfaceView layers
+    private val geckoView: GeckoView? =
+            geckoSession?.let { session ->
+                GeckoView(context).apply {
+                    setViewBackend(GeckoView.BACKEND_TEXTURE_VIEW)
+                    setSession(session)
+                    elevation = 10f // above the (now empty) tab WebViews
+                    webViewsContainer.addView(
+                            this,
+                            FrameLayout.LayoutParams.MATCH_PARENT,
+                            FrameLayout.LayoutParams.MATCH_PARENT
+                    )
+                }
+            }
 
     private val rightEyeView: SurfaceView = SurfaceView(context)
 
@@ -1962,7 +2061,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     windowCallback?.onWindowCreated(newWebView)
 
                     var restored = false
-                    if (stateString.isNotEmpty()) {
+                    // WebView history bundles mean nothing to GeckoView: load the saved URL instead
+                    if (stateString.isNotEmpty() && geckoSession == null) {
                         try {
                             val bytes = Base64.decode(stateString, Base64.DEFAULT)
                             val parcel = Parcel.obtain()
