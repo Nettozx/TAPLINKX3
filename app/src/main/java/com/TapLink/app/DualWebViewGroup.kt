@@ -285,18 +285,33 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     setViewBackend(GeckoView.BACKEND_TEXTURE_VIEW)
                     setSession(session)
                     elevation = 10f // above the (now empty) tab WebViews
-                    webViewsContainer.addView(
-                            this,
-                            FrameLayout.LayoutParams.MATCH_PARENT,
-                            FrameLayout.LayoutParams.MATCH_PARENT
-                    )
                     // Debug URL from the launch intent; after tab restore, which loads the saved URL
                     GeckoEngine.pendingUrl?.let { url ->
                         GeckoEngine.pendingUrl = null
-                        postDelayed({ session.loadUri(url) }, 3000)
+                        android.os.Handler(android.os.Looper.getMainLooper())
+                                .postDelayed({
+                                    Log.d("GeckoEngine", "debug url ${url.take(80)}")
+                                    session.loadUri(url)
+                                }, 3000)
                     }
                 }
             }
+
+    init {
+        attachGeckoView()
+    }
+
+    /** (Re)adds the GeckoView on top of the tabs; tab restore clears webViewsContainer. */
+    private fun attachGeckoView() {
+        val gecko = geckoView ?: return
+        if (gecko.parent == null) {
+            webViewsContainer.addView(
+                    gecko,
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        }
+    }
 
     private val rightEyeView: SurfaceView = SurfaceView(context)
 
@@ -2097,6 +2112,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 windows.clear()
 
                 webViewsContainer.removeAllViews()
+                attachGeckoView()
 
                 for (i in 0 until windowsArray.length()) {
                     val winObj = windowsArray.getJSONObject(i)
