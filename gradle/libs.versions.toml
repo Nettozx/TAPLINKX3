@@ -1,6 +1,6 @@
 [versions]
 agp = "8.13.2"
-kotlin = "2.1.0"
+kotlin = "2.4.21"
 coreKtx = "1.17.0"
 junit = "4.13.2"
 junitVersion = "1.2.1"
@@ -15,6 +15,7 @@ fragmentKtx = "1.8.6"
 recyclerview = "1.4.0"
 coroutines = "1.10.0"
 gson = "2.11.0"
+geckoview = "159.0.20261102144711"
 zxingEmbedded = "4.3.0"
 
 [libraries]
@@ -33,6 +34,8 @@ androidx-recyclerview = { group = "androidx.recyclerview", name = "recyclerview"
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
+# arm64-only GeckoView: the glasses are arm64, and the multi-ABI artifact would bloat the APK
+mozilla-geckoview = { group = "org.mozilla.geckoview", name = "geckoview-arm64-v8a", version.ref = "geckoview" }
 zxing-embedded = { group = "com.journeyapps", name = "zxing-android-embedded", version.ref = "zxingEmbedded" }
 
 [plugins]
