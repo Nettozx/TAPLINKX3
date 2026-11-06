@@ -36,6 +36,7 @@ import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
+import android.webkit.ValueCallback
 import android.webkit.WebView
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
@@ -111,24 +112,42 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Experimental GeckoView engine: the WebView stays as the tab's handle for the app's logic,
         // but pages load in, and synthesized input goes to, the GeckoView on top of the tabs.
         override fun loadUrl(url: String) {
-            val session = geckoSession
-            if (session != null && !url.startsWith("javascript:")) {
-                session.loadUri(GeckoEngine.toGeckoUri(url))
-            } else {
-                super.loadUrl(url)
-            }
+            if (!loadInGecko(url)) super.loadUrl(url)
         }
 
         override fun loadUrl(url: String, additionalHttpHeaders: Map<String, String>) {
-            val session = geckoSession
-            if (session != null && !url.startsWith("javascript:")) {
-                session.loadUri(GeckoEngine.toGeckoUri(url))
+            if (!loadInGecko(url)) super.loadUrl(url, additionalHttpHeaders)
+        }
+
+        private fun loadInGecko(url: String): Boolean {
+            val session = geckoSession ?: return false
+            if (url.startsWith("javascript:")) {
+                geckoBridge?.evaluate(url.removePrefix("javascript:"), null)
             } else {
-                super.loadUrl(url, additionalHttpHeaders)
+                session.loadUri(GeckoEngine.toGeckoUri(url))
             }
+            return true
         }
 
         override fun getUrl(): String? = if (geckoSession != null) geckoUrl else super.getUrl()
+
+        override fun getTitle(): String? = if (geckoSession != null) geckoTitle else super.getTitle()
+
+        // Page scripts and JS interfaces go through the taplink_bridge WebExtension (GeckoBridge)
+        override fun evaluateJavascript(script: String, resultCallback: ValueCallback<String>?) {
+            val bridge = geckoBridge
+            if (bridge != null) bridge.evaluate(script, resultCallback) else super.evaluateJavascript(script, resultCallback)
+        }
+
+        override fun addJavascriptInterface(obj: Any, name: String) {
+            geckoBridge?.addInterface(obj, name)
+            super.addJavascriptInterface(obj, name)
+        }
+
+        override fun removeJavascriptInterface(name: String) {
+            geckoBridge?.removeInterface(name)
+            super.removeJavascriptInterface(name)
+        }
 
         override fun canGoBack(): Boolean = if (geckoSession != null) geckoCanGoBack else super.canGoBack()
 
@@ -243,6 +262,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private var geckoCanGoBack = false
     private var geckoCanGoForward = false
     private var forwardingToGecko = false
+    private var geckoTitle: String? = null
+
+    private val geckoBridge: GeckoBridge? = if (GeckoEngine.isEnabled(context)) GeckoBridge() else null
 
     private val geckoSession: GeckoSession? =
             if (GeckoEngine.isEnabled(context)) {
@@ -256,7 +278,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                         hasUserGesture: Boolean
                                 ) {
                                     Log.d("GeckoEngine", "location $url")
-                                    geckoUrl = url
+                                    geckoUrl = GeckoEngine.fromGeckoUri(url)
                                 }
 
                                 override fun onLoadRequest(
@@ -284,13 +306,42 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                             object : GeckoSession.ProgressDelegate {
                                 override fun onPageStart(session: GeckoSession, url: String) {
                                     Log.d("GeckoEngine", "page start $url")
+                                    onGeckoPageStarted(url)
                                 }
 
                                 override fun onPageStop(session: GeckoSession, success: Boolean) {
                                     Log.d("GeckoEngine", "page stop success=$success")
+                                    onGeckoPageFinished()
+                                }
+
+                                override fun onProgressChange(session: GeckoSession, progress: Int) {
+                                    onGeckoProgress(progress)
+                                }
+                            }
+                    contentDelegate =
+                            object : GeckoSession.ContentDelegate {
+                                override fun onTitleChange(session: GeckoSession, title: String?) {
+                                    geckoTitle = title
                                 }
                             }
                     open(GeckoEngine.runtime(context))
+                    val bridge = geckoBridge
+                    if (bridge != null) {
+                        GeckoEngine.bridgeExtension(context)
+                                .accept(
+                                        { extension ->
+                                            if (extension != null) {
+                                                webExtensionController.setMessageDelegate(
+                                                        extension,
+                                                        bridge,
+                                                        GeckoEngine.BRIDGE_NATIVE_APP
+                                                )
+                                                Log.d("GeckoEngine", "bridge extension ready")
+                                            }
+                                        },
+                                        { e -> Log.e("GeckoEngine", "bridge extension failed", e) }
+                                )
+                    }
                 }
             } else {
                 null
@@ -325,6 +376,35 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     private fun activeTabBlocksTouch(event: MotionEvent): Boolean =
             webView.touchListener?.onTouch(webView, event) == true
+
+    // Gecko page events drive the active tab's WebViewClient/WebChromeClient, so MainActivity's page
+    // logic (URL persistence, progress, viewport/input/observer injection via the bridge) still runs.
+    private fun onGeckoPageStarted(url: String) {
+        if (url == "about:blank") return // MainActivity treats about:blank loads as errors and reloads
+        try {
+            webView.webViewClient.onPageStarted(webView, GeckoEngine.fromGeckoUri(url), null)
+        } catch (e: Exception) {
+            Log.e("GeckoEngine", "onPageStarted failed", e)
+        }
+    }
+
+    private fun onGeckoPageFinished() {
+        val url = geckoUrl ?: return
+        if (url == "about:blank") return
+        try {
+            webView.webViewClient.onPageFinished(webView, url)
+        } catch (e: Exception) {
+            Log.e("GeckoEngine", "onPageFinished failed", e)
+        }
+    }
+
+    private fun onGeckoProgress(progress: Int) {
+        try {
+            webView.webChromeClient?.onProgressChanged(webView, progress)
+        } catch (e: Exception) {
+            Log.e("GeckoEngine", "onProgressChanged failed", e)
+        }
+    }
 
     /** (Re)adds the GeckoView on top of the tabs; tab restore clears webViewsContainer. */
     private fun attachGeckoView() {
