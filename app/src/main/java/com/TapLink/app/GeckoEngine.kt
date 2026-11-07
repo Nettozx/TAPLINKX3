@@ -57,8 +57,13 @@ object GeckoEngine {
             runtime
                     ?: GeckoRuntime.create(
                                     context.applicationContext,
-                                    // Page console messages go to logcat (tag GeckoConsole) while we port
-                                    GeckoRuntimeSettings.Builder().consoleOutput(true).build()
+                                    GeckoRuntimeSettings.Builder()
+                                            // Page console messages go to logcat (tag GeckoConsole) while we port
+                                            .consoleOutput(true)
+                                            // Match the WebView's textZoom = 80 (MainActivity)
+                                            .automaticFontSizeAdjustment(false)
+                                            .fontSizeFactor(0.8f)
+                                            .build()
                             )
                             .also {
                                 runtime = it
