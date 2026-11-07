@@ -2304,109 +2304,38 @@ class MainActivity :
         }
     }
 
-    // Voice typing with the device's speech recognizer (RayNeo's RecognitionService on the X3
-    // Pro), replacing the Groq service that needed an API key
-    private var voiceRecognizer: SpeechRecognizer? = null
+    // Offline voice typing (Vosk): the glasses' own recognizer (RayNeo's) doesn't answer other
+    // apps, and Groq needed an API key and a connection
+    private var offlineSpeech: OfflineSpeech? = null
 
     private fun toggleSystemSpeech() {
-        if (isListeningForSpeech) {
-            voiceRecognizer?.stopListening()
-            dualWebViewGroup.showToast("Processing...")
-            return
-        }
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            dualWebViewGroup.showToast("Voice typing isn't available on this device")
-            return
-        }
-        val recognizer =
-                voiceRecognizer
-                        ?: SpeechRecognizer.createSpeechRecognizer(this).also {
-                            it.setRecognitionListener(speechListener)
-                            voiceRecognizer = it
-                        }
-        val intent =
-                Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                    putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
-                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                }
-        setVoiceAssistantAudioRoute(true)
-        isListeningForSpeech = true
-        keyboardView?.setMicActive(true)
-        handler.removeCallbacks(speechTimeout)
-        handler.postDelayed(speechTimeout, 15000)
-        try {
-            recognizer.startListening(intent)
-            dualWebViewGroup.showToast("Listening...")
-        } catch (e: Exception) {
-            DebugLog.e("SpeechRecognition", "startListening failed", e)
-            endSpeech()
-            dualWebViewGroup.showToast("Voice typing failed to start")
-        }
+        val speech =
+                offlineSpeech
+                        ?: OfflineSpeech(
+                                        this,
+                                        object : OfflineSpeech.Callbacks {
+                                            override fun onStatus(text: String) {
+                                                dualWebViewGroup.showToast(text, 2500L)
+                                            }
+
+                                            override fun onListening(active: Boolean) {
+                                                isListeningForSpeech = active
+                                                keyboardView?.setMicActive(active)
+                                                setVoiceAssistantAudioRoute(active)
+                                            }
+
+                                            override fun onText(text: String) {
+                                                handleVoiceResult(text)
+                                            }
+
+                                            override fun onError(message: String) {
+                                                dualWebViewGroup.showToast(message)
+                                            }
+                                        }
+                                )
+                                .also { offlineSpeech = it }
+        speech.toggle()
     }
-
-    // The glasses' recognizer may never answer third-party apps: don't leave the mic stuck on
-    private val speechTimeout = Runnable {
-        if (isListeningForSpeech) {
-            voiceRecognizer?.cancel()
-            endSpeech()
-            dualWebViewGroup.showToast("Voice typing didn't respond")
-        }
-    }
-
-    private fun endSpeech() {
-        handler.removeCallbacks(speechTimeout)
-        isListeningForSpeech = false
-        setVoiceAssistantAudioRoute(false)
-        keyboardView?.setMicActive(false)
-    }
-
-    private val speechListener =
-            object : RecognitionListener {
-                override fun onResults(results: Bundle?) {
-                    val text =
-                            results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
-                    runOnUiThread {
-                        endSpeech()
-                        if (text.isNullOrBlank()) {
-                            dualWebViewGroup.showToast("Didn't catch that")
-                        } else {
-                            handleVoiceResult(text)
-                        }
-                    }
-                }
-
-                override fun onError(error: Int) {
-                    DebugLog.e("SpeechRecognition", "recognizer error $error")
-                    runOnUiThread {
-                        endSpeech()
-                        val message =
-                                when (error) {
-                                    SpeechRecognizer.ERROR_NO_MATCH,
-                                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Didn't catch that"
-                                    SpeechRecognizer.ERROR_NETWORK,
-                                    SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Voice typing needs a connection"
-                                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission needed"
-                                    else -> "Voice typing error ($error)"
-                                }
-                        dualWebViewGroup.showToast(message)
-                    }
-                }
-
-                override fun onEndOfSpeech() {}
-
-                override fun onReadyForSpeech(params: Bundle?) {}
-
-                override fun onBeginningOfSpeech() {}
-
-                override fun onRmsChanged(rmsdB: Float) {}
-
-                override fun onBufferReceived(buffer: ByteArray?) {}
-
-                override fun onPartialResults(partialResults: Bundle?) {}
-
-                override fun onEvent(eventType: Int, params: Bundle?) {}
-            }
 
     fun showGroqKeyDialog() {
         if (groqAudioService == null) {
@@ -6857,8 +6786,8 @@ class MainActivity :
 
     override fun onDestroy() {
         super.onDestroy()
-        voiceRecognizer?.destroy()
-        voiceRecognizer = null
+        offlineSpeech?.release()
+        offlineSpeech = null
         if (::controllerBluetoothClient.isInitialized) {
             controllerBluetoothClient.stop()
         }
