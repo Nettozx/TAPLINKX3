@@ -331,7 +331,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     // Gecko says when a text field gains focus, in any frame (the app's JS check
                     // only sees the top document, e.g. not Plex's sign-in frame). Show the app's
                     // keyboard instead of the system one.
-                    textInput.delegate =
+                    textInput.setDelegate(
                             object : GeckoSession.TextInputDelegate {
                                 override fun showSoftInput(session: GeckoSession) {
                                     Log.d("GeckoEngine", "showSoftInput")
@@ -342,6 +342,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                     Log.d("GeckoEngine", "hideSoftInput")
                                 }
                             }
+                    )
                     open(GeckoEngine.runtime(context))
                     val bridge = geckoBridge
                     if (bridge != null) {
