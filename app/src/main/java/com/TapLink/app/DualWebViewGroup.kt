@@ -485,11 +485,15 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     // GeckoView lays websites out tighter than the WebView did; start them at 90% (the zoom-out
-    // button's first step). App pages are designed for 100%.
+    // button's first step), and one more step in page fullscreen, where Plex's player otherwise
+    // ran slightly off the eye. App pages are designed for 100%.
     private fun effectiveWebZoom(): Float {
         val base =
-                if (geckoSession != null && webView.url?.startsWith("file:///android_asset/") != true) 0.9f
-                else 1f
+                if (geckoSession != null && webView.url?.startsWith("file:///android_asset/") != true) {
+                    if (geckoFullScreen) 0.81f else 0.9f
+                } else {
+                    1f
+                }
         return currentWebZoom * base
     }
 
@@ -521,6 +525,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
         updateScrollBarsVisibility()
         requestLayout()
+        if (webView.url?.startsWith("file:///android_asset/") != true) applyWebZoom(effectiveWebZoom())
         if (fullScreen) postDelayed({ logGeckoFullScreenGeometry() }, 800)
     }
 
@@ -2909,6 +2914,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                     )
                                     .apply { gravity = Gravity.TOP or Gravity.END }
                     elevation = 900f
+                    // Half see-through: it sits over page content (taps and hover already pass)
+                    alpha = 0.5f
                     visibility = View.VISIBLE // Explicitly set visibility
                 }
 
