@@ -479,7 +479,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val gecko = geckoView ?: return
         if (fullScreen == geckoFullScreen) return
         geckoFullScreen = fullScreen
-        val client = webView.webChromeClient ?: return
+        val client = webView.webChromeClient
+        Log.d("GeckoEngine", "fullscreen overlay ${if (fullScreen) "show" else "hide"} client=${client != null}")
+        if (client == null) return
         if (fullScreen) {
             client.onShowCustomView(
                     gecko,
