@@ -172,26 +172,21 @@
     };
     document.addEventListener("play", report, true);
     document.addEventListener("pause", report, true);
-    // Who calls play()/pause(): the page's stack, so engine-initiated pauses show as having none
+    // Who calls play()/pause(), with the caller's stack; a pause with no call is the engine's.
+    // The wrapper runs in the page's own world (a wrapper from this sandbox broke play()'s
+    // promise and Plex's playback); it only reports through __taplinkTrace.
     try {
-      const proto = pageWindow.HTMLMediaElement.prototype;
-      for (const name of ["play", "pause"]) {
-        const original = proto[name];
-        exportFunction(function () {
-          let stack = "";
-          try {
-            stack = String(new pageWindow.Error().stack).split("\n").slice(1, 4)
-              .map((line) => line.replace(/https?:\/\/[^ ]*\//, "").slice(0, 70)).join(" | ");
-          } catch (e) {
-            // no stack
-          }
-          note("call:" + name);
-          log("media call " + name + " :: " + stack);
-          return original.apply(this, arguments);
-        }, proto, { defineAs: name });
-      }
+      exportFunction((name, stack) => {
+        note("call:" + name);
+        log("media call " + name + " :: " + stack);
+      }, pageWindow, { defineAs: "__taplinkTrace" });
+      pageWindow.eval(
+        "(function(){var P=HTMLMediaElement.prototype;['play','pause'].forEach(function(n){" +
+        "var o=P[n];P[n]=function(){try{var s=String(new Error().stack).split('\\n').slice(1,4)" +
+        ".map(function(l){return l.replace(/https?:\\/\\/[^ ]*\\//,'').slice(0,70);}).join(' | ');" +
+        "window.__taplinkTrace(n,s);}catch(e){}return o.apply(this,arguments);};});})();");
     } catch (e) {
-      log("media call tracing failed: " + e);
+      log("media call tracing unavailable: " + e);
     }
     // Buffering, to tell a stalling player from one being toggled
     for (const type of ["waiting", "stalled", "canplay", "playing", "seeking", "seeked", "suspend"]) {

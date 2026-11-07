@@ -5748,6 +5748,12 @@ class MainActivity :
     }
 
     override fun onRefreshPressed() {
+        // GeckoView: reload for real. Loading the same URL is only a hash change on single-page
+        // apps (Plex), which left the device-width viewport below and skipped the site zoom.
+        if (dualWebViewGroup.isGeckoEngine()) {
+            webView.reload()
+            return
+        }
         val currentUrl = webView.url
         webView.evaluateJavascript(
                 """
@@ -5777,7 +5783,16 @@ class MainActivity :
                 )
     }
 
+    private val MEDIA_KEY_CODES = setOf(
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PAUSE,
+            KeyEvent.KEYCODE_MEDIA_STOP, KeyEvent.KEYCODE_MEDIA_NEXT, KeyEvent.KEYCODE_MEDIA_PREVIOUS,
+            KeyEvent.KEYCODE_HEADSETHOOK
+    )
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN && event.keyCode in MEDIA_KEY_CODES) {
+            android.util.Log.d("GeckoEngine", "media key ${KeyEvent.keyCodeToString(event.keyCode)} from ${event.device?.name}")
+        }
         if (event.action == KeyEvent.ACTION_DOWN) {
             when (event.keyCode) {
                 KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
