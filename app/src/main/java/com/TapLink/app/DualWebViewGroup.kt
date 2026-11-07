@@ -730,6 +730,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         } catch (e: Exception) {
             Log.e("GeckoEngine", "onPageFinished failed", e)
         }
+        if (url == EXTENSIONS_PAGE_URL && tab === currentGeckoTab) postDelayed({ pushExtensionsToPage() }, 300)
         // Websites only: app pages keep their design size (the WebView never re-applied the saved
         // zoom on load, so applying it here shrank the dashboard)
         if (url.startsWith("file:///android_asset/")) return
@@ -4791,7 +4792,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         } else {
             leftSystemInfoView.visibility = View.VISIBLE
             // Calculate system info bar position
-            val infoBarHeight = 24
+            val infoBarHeight = 16
             val infoBarY = eyeHeight - navBarHeight - infoBarHeight // Position above nav bar
 
             // First measure the info views to get their width
@@ -8977,6 +8978,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val script =
                 """
             (function() {
+                // GeckoView: the page bridge's navigator.geolocation, which also works on sites
+                // whose CSP keeps this script out of the page's own world
+                if (window.__taplinkSetPosition) window.__taplinkSetPosition($latitude, $longitude);
                 // Store the position globally so it persists
                 window.__injectedPosition = {
                     coords: {

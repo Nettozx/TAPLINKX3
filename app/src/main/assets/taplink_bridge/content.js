@@ -145,6 +145,90 @@
     else document.addEventListener("DOMContentLoaded", observe, { once: true });
   }
 
+  // navigator.geolocation backed by TapLink's location (the phone's GPS over RayNeo's link; the
+  // glasses have none). Defined from here so it also applies on sites whose CSP keeps TapLink's
+  // own location script out of the page.
+  let wantLocation = false;
+  function requestLocation() {
+    wantLocation = true;
+    send({ type: "call", iface: "AndroidInterface", method: "requestCurrentLocation", argsJson: "[]" });
+  }
+
+  function installGeolocation() {
+    const geo = pageWindow.navigator && pageWindow.navigator.geolocation;
+    if (!geo) return;
+    let position = null;
+    const waiting = [];
+    const watchers = new Map();
+    let nextWatchId = 1;
+    const toPage = () => cloneInto({
+      coords: {
+        latitude: position.latitude,
+        longitude: position.longitude,
+        accuracy: 20,
+        altitude: null,
+        altitudeAccuracy: null,
+        heading: null,
+        speed: null
+      },
+      timestamp: Date.now()
+    }, pageWindow);
+    const deliver = (callback) => {
+      try {
+        callback(toPage());
+      } catch (e) {
+        // page callback threw
+      }
+    };
+    const setPosition = (latitude, longitude) => {
+      position = { latitude: Number(latitude), longitude: Number(longitude) };
+      wantLocation = false;
+      for (const w of waiting.splice(0)) {
+        clearTimeout(w.timer);
+        deliver(w.success);
+      }
+      watchers.forEach(deliver);
+    };
+    window.__taplinkSetPosition = setPosition;
+    exportFunction(setPosition, pageWindow, { defineAs: "__taplinkSetPosition" });
+
+    exportFunction(function (success, error) {
+      if (typeof success !== "function") return;
+      if (position) {
+        setTimeout(() => deliver(success), 0);
+        requestLocation();
+        return;
+      }
+      const w = { success: success };
+      w.timer = setTimeout(() => {
+        const index = waiting.indexOf(w);
+        if (index >= 0) waiting.splice(index, 1);
+        if (typeof error === "function") {
+          try {
+            error(cloneInto({ code: 2, message: "Location unavailable", PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 }, pageWindow));
+          } catch (e) {
+            // page callback threw
+          }
+        }
+      }, 20000);
+      waiting.push(w);
+      requestLocation();
+    }, geo, { defineAs: "getCurrentPosition" });
+
+    exportFunction(function (success) {
+      if (typeof success !== "function") return 0;
+      const id = nextWatchId++;
+      watchers.set(id, success);
+      if (position) setTimeout(() => deliver(success), 0);
+      requestLocation();
+      return id;
+    }, geo, { defineAs: "watchPosition" });
+
+    exportFunction(function (id) {
+      watchers.delete(id);
+    }, geo, { defineAs: "clearWatch" });
+  }
+
   function onMessage(message) {
     try {
       if (message.type === "interfaces") {
@@ -169,6 +253,7 @@
       return;
     }
     port.onMessage.addListener(onMessage);
+    if (wantLocation) requestLocation();
     port.onDisconnect.addListener(() => {
       port = null;
       retry();
@@ -180,6 +265,11 @@
     if (connectAttempts++ < 40) setTimeout(connect, 250);
   }
 
+  try {
+    installGeolocation();
+  } catch (e) {
+    // no geolocation on this page
+  }
   disableDoubleTapDelay();
   guardClickThrough();
   keepScrollMetricsFresh();

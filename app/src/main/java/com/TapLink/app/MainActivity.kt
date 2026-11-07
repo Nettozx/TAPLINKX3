@@ -2333,6 +2333,8 @@ class MainActivity :
         setVoiceAssistantAudioRoute(true)
         isListeningForSpeech = true
         keyboardView?.setMicActive(true)
+        handler.removeCallbacks(speechTimeout)
+        handler.postDelayed(speechTimeout, 15000)
         try {
             recognizer.startListening(intent)
             dualWebViewGroup.showToast("Listening...")
@@ -2343,7 +2345,17 @@ class MainActivity :
         }
     }
 
+    // The glasses' recognizer may never answer third-party apps: don't leave the mic stuck on
+    private val speechTimeout = Runnable {
+        if (isListeningForSpeech) {
+            voiceRecognizer?.cancel()
+            endSpeech()
+            dualWebViewGroup.showToast("Voice typing didn't respond")
+        }
+    }
+
     private fun endSpeech() {
+        handler.removeCallbacks(speechTimeout)
         isListeningForSpeech = false
         setVoiceAssistantAudioRoute(false)
         keyboardView?.setMicActive(false)

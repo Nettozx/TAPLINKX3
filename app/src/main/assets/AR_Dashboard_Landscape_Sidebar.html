@@ -1042,6 +1042,14 @@
           img.src = `https://www.google.com/s2/favicons?domain=${host}&sz=64`;
         } catch (e) { }
       }
+      // Icons can fail right after launch (uBlock Origin holds requests until its lists load)
+      img.addEventListener('error', function retry() {
+        const tries = Number(img.dataset.retries || 0);
+        if (tries >= 3 || !img.src.startsWith('https://')) return;
+        img.dataset.retries = String(tries + 1);
+        const base = img.src.replace(/&retry=\d+$/, '');
+        setTimeout(() => { img.src = base + '&retry=' + (tries + 1); }, 2000 * (tries + 1));
+      });
       const label = document.createElement('span');
       label.textContent = meta.name;
       const actions = document.createElement('div');

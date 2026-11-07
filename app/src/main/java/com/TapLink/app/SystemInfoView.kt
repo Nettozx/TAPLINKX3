@@ -1,5 +1,6 @@
 package com.TapLinkX3.app
 
+import android.view.View
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -69,7 +70,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     Gravity.CENTER_VERTICAL or Gravity.END // Ensure parent layout centers children
             setPadding(4, 0, 4, 0) // Removed vertical padding to let height control spacing
             setBackgroundColor(Color.parseColor("#202020"))
-            minimumHeight = 24 // Ensure consistent height
+            minimumHeight = 16 // Ensure consistent height
 
             setupViews()
         } catch (e: Exception) {
@@ -84,7 +85,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         connectivityIcon = createIconView().also { addView(it) }
 
         // Create and add battery icon and text
-        batteryIcon = createIconView().also { addView(it) }
+        // Minimal strip: battery as a percentage only
+        batteryIcon = createIconView().also { it.visibility = View.GONE; addView(it) }
         batteryText = createTextView().also { addView(it) }
 
         // Create and add text views
@@ -103,12 +105,12 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         return ImageView(context).apply {
             layoutParams =
                     LayoutParams(
-                                    24, // width in dp
-                                    24 // height in dp
+                                    14, // width in dp
+                                    14 // height in dp
                             )
                             .apply {
                                 gravity = Gravity.CENTER_VERTICAL
-                                setMargins(6, 0, 6, 0)
+                                setMargins(3, 0, 3, 0)
                             }
             scaleType = ImageView.ScaleType.FIT_CENTER
         }
@@ -117,7 +119,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private fun createTextView(): TextView {
         return TextView(context).apply {
             setTextColor(Color.WHITE)
-            textSize = 12f
+            textSize = 10f
             gravity = Gravity.CENTER_VERTICAL // Changed from CENTER to CENTER_VERTICAL
             layoutParams =
                     LayoutParams(
@@ -125,7 +127,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                     LayoutParams.MATCH_PARENT // Changed from WRAP_CONTENT to
                                     // MATCH_PARENT
                                     )
-                            .apply { setMargins(6, 0, 6, 0) }
+                            .apply { setMargins(3, 0, 3, 0) }
             includeFontPadding = false // Removes extra padding around text
         }
     }
