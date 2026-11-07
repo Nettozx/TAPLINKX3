@@ -181,6 +181,7 @@
       }
     };
     const setPosition = (latitude, longitude) => {
+      log("geolocation: position from TapLink, " + waiting.length + " waiting, " + watchers.size + " watching");
       position = { latitude: Number(latitude), longitude: Number(longitude) };
       wantLocation = false;
       for (const w of waiting.splice(0)) {
@@ -193,6 +194,7 @@
     exportFunction(setPosition, pageWindow, { defineAs: "__taplinkSetPosition" });
 
     exportFunction(function (success, error) {
+      log("geolocation: getCurrentPosition (" + (position ? "have" : "no") + " position)");
       if (typeof success !== "function") return;
       if (position) {
         setTimeout(() => deliver(success), 0);
@@ -216,6 +218,7 @@
     }, geo, { defineAs: "getCurrentPosition" });
 
     exportFunction(function (success) {
+      log("geolocation: watchPosition (" + (position ? "have" : "no") + " position)");
       if (typeof success !== "function") return 0;
       const id = nextWatchId++;
       watchers.set(id, success);

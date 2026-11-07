@@ -94,9 +94,13 @@ class OfflineSpeech(private val context: Context, private val callbacks: Callbac
         }
     }
 
+    // Stop Vosk's recording thread before releasing the microphone: releasing it while the thread
+    // still reads makes Vosk throw "error reading audio buffer" on that thread, crashing the app
     private fun finish() {
-        service?.shutdown()
+        val current = service ?: return
         service = null
+        current.cancel()
+        current.shutdown()
         callbacks.onListening(false)
     }
 
@@ -203,6 +207,7 @@ class OfflineSpeech(private val context: Context, private val callbacks: Callbac
     }
 
     fun release() {
+        service?.cancel()
         service?.shutdown()
         service = null
         model?.close()

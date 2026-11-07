@@ -6964,6 +6964,7 @@ class MainActivity :
             activity.runOnUiThread {
                 activity.noteGeolocationUse()
                 val location = activity.getLastLocation()
+                android.util.Log.d("GeckoEngine", "location requested; phone fix ${if (location != null) "known" else "not yet"}")
                 if (location != null) {
                     activity.dualWebViewGroup.injectLocation(location.first, location.second)
                 }
