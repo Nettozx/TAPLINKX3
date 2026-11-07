@@ -760,6 +760,14 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         } catch (e: Exception) {
             Log.e("GeckoEngine", "onPageStarted failed", e)
         }
+        // Zoom websites from the start of the load (the bridge runs the script as soon as the page
+        // connects), not only once it finishes: heavy pages like ChatGPT laid out at the wrong
+        // width for many seconds and then jumped. It's applied again when the load finishes.
+        // (The tab's URL may still be the previous page's here, so pass the new page's facts.)
+        if (!GeckoEngine.fromGeckoUri(url).orEmpty().startsWith("file:///android_asset/")) {
+            val zoom = currentWebZoom * 0.9f
+            if (zoom != 1f) applyWebZoom(zoom, target = tab.owner, appPage = false)
+        }
     }
 
     private fun onGeckoPageFinished(tab: GeckoTab) {
@@ -785,8 +793,13 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
      * width=600 divided by the zoom), which Gecko scales to fit. Desktop mode lays out at least
      * at its 1280px desktop width.
      */
-    private fun applyWebZoom(zoom: Float, nudge: Boolean = false, target: WebView = webView) {
-        val isAppPage = target.url?.startsWith("file:///android_asset/") == true
+    private fun applyWebZoom(
+            zoom: Float,
+            nudge: Boolean = false,
+            target: WebView = webView,
+            appPage: Boolean = target.url?.startsWith("file:///android_asset/") == true
+    ) {
+        val isAppPage = appPage
         val script =
                 if (geckoEnabled && !isAppPage) {
                     val mobileWidth = Math.round(600f / zoom)
