@@ -15,7 +15,11 @@ import org.mozilla.geckoview.WebExtensionController
  * Mozilla's signature), keeps track of each add-on's toolbar button so its popup can be opened, and
  * routes the tabs and options pages add-ons open to the app. All calls on the main thread.
  */
-class GeckoExtensions(private val runtime: GeckoRuntime, private val host: Host) {
+class GeckoExtensions(
+        private val runtime: GeckoRuntime,
+        private val pageSession: GeckoSession,
+        private val host: Host
+) {
 
     interface Host {
         /** Show an add-on popup or tab session in place of the page until Back or it closes. */
@@ -106,6 +110,8 @@ class GeckoExtensions(private val runtime: GeckoRuntime, private val host: Host)
     }
 
     init {
+        // Add-ons act on the active tab (toolbar popups don't open without one); TapLink's page is it
+        controller.setTabActive(pageSession, true)
         // The user picks what to install from TapLink's Extensions page, so accept the
         // permissions an add-on asks for (Firefox would show them in a dialog).
         controller.setPromptDelegate(
@@ -149,6 +155,9 @@ class GeckoExtensions(private val runtime: GeckoRuntime, private val host: Host)
         if (extension.isBuiltIn) return
         extension.setActionDelegate(actionDelegate)
         extension.setTabDelegate(tabDelegate)
+        // Popups open for the page's tab, as on Firefox for Android
+        pageSession.webExtensionController.setActionDelegate(extension, actionDelegate)
+        pageSession.webExtensionController.setTabDelegate(extension, sessionTabDelegate)
     }
 
     fun refresh() {

@@ -153,7 +153,15 @@
       function button(label, onTap, className) {
         const node = el("button", "btn" + (className ? " " + className : ""), label);
         node.type = "button";
-        node.addEventListener("click", onTap);
+        node.addEventListener("click", () => {
+          console.log("extensions page: " + label);
+          try {
+            onTap();
+          } catch (e) {
+            console.error("extensions page: " + label + " failed: " + e);
+            setStatus(label + " failed: " + e);
+          }
+        });
         return node;
       }
 

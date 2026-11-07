@@ -413,6 +413,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             else
                     GeckoExtensions(
                             GeckoEngine.runtime(context),
+                            geckoSession,
                             object : GeckoExtensions.Host {
                                 override fun showExtensionPopup(session: GeckoSession) {
                                     post { showExtensionPopupSession(session) }
@@ -493,6 +494,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     // page, so act only while that page is the one open, and install only from addons.mozilla.org.
     private inner class ExtensionsJsInterface {
         private fun onPage(block: (GeckoExtensions) -> Unit) {
+            Log.d("GeckoExtensions", "page call ${Throwable().stackTrace.getOrNull(1)?.methodName}")
             post {
                 val extensions = geckoExtensions
                 if (extensions != null && isExtensionsPageOpen()) block(extensions)
