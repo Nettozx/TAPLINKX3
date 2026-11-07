@@ -469,7 +469,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
      * mode are zoomed like a mobile browser does instead: a wider layout viewport (TapLink's
      * width=600 divided by the zoom), which Gecko scales to fit.
      */
-    private fun applyWebZoom(zoom: Float) {
+    private fun applyWebZoom(zoom: Float, nudge: Boolean = false) {
         val isAppPage = webView.url?.startsWith("file:///android_asset/") == true
         val script =
                 if (geckoSession != null && !isAppPage && !isDesktopMode()) {
@@ -477,7 +477,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     "(function(){var m=document.querySelector('meta[name=\"viewport\"]');" +
                             "if(!m){m=document.createElement('meta');m.name='viewport';" +
                             "(document.head||document.documentElement).appendChild(m);}" +
-                            "m.content='width=$width';if(document.body)document.body.style.zoom='';})();"
+                            (if (nudge) "m.content='width=${width + 1}';" else "") +
+                    "requestAnimationFrame(function(){m.content='width=$width';});" +
+                    "if(document.body)document.body.style.zoom='';})();"
                 } else {
                     "document.body && (document.body.style.zoom = '$zoom');"
                 }
@@ -485,12 +487,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     // GeckoView lays websites out tighter than the WebView did; start them at 90% (the zoom-out
-    // button's first step), and one more step in page fullscreen, where Plex's player otherwise
-    // ran slightly off the eye. App pages are designed for 100%.
+    // button's first step). App pages are designed for 100%.
     private fun effectiveWebZoom(): Float {
         val base =
                 if (geckoSession != null && webView.url?.startsWith("file:///android_asset/") != true) {
-                    if (geckoFullScreen) 0.81f else 0.9f
+                    0.9f
                 } else {
                     1f
                 }
@@ -525,10 +526,13 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
         updateScrollBarsVisibility()
         requestLayout()
+        // After entering or leaving fullscreen Gecko can keep the previous scale (Plex's controls
+        // cut off, or the page left zoomed in) until the viewport changes, as a zoom button press
+        // did. Nudge it once the transition has settled.
         if (webView.url?.startsWith("file:///android_asset/") != true) {
-            applyWebZoom(effectiveWebZoom())
-            // Gecko's fullscreen transition can override a viewport change made at its start
-            postDelayed({ if (geckoFullScreen == fullScreen) applyWebZoom(effectiveWebZoom()) }, 700)
+            for (delay in longArrayOf(700, 1600)) {
+                postDelayed({ if (geckoFullScreen == fullScreen) applyWebZoom(effectiveWebZoom(), nudge = true) }, delay)
+            }
         }
         if (fullScreen) postDelayed({ logGeckoFullScreenGeometry() }, 800)
         // Let the cursor start (or stop) its fullscreen idle hide

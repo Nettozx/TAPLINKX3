@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "TapLink Bridge",
-  "version": "1.5",
+  "version": "1.6",
   "description": "Connects pages to TapLink when it runs on the GeckoView engine.",
   "browser_specific_settings": {
     "gecko": {

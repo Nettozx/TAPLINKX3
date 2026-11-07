@@ -172,6 +172,13 @@
     };
     document.addEventListener("play", report, true);
     document.addEventListener("pause", report, true);
+    // Buffering, to tell a stalling player from one being toggled
+    for (const type of ["waiting", "stalled", "canplay", "playing", "seeking", "seeked", "suspend"]) {
+      document.addEventListener(type, (e) => {
+        const media = e.target;
+        note(type + (media && media.readyState !== undefined ? "/rs" + media.readyState : ""));
+      }, true);
+    }
   }
 
   function onMessage(message) {
