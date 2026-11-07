@@ -38,7 +38,9 @@ import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
+import android.view.InputDevice
 import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
 import android.webkit.WebView
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
@@ -327,6 +329,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                 override fun onTitleChange(session: GeckoSession, title: String?) {
                                     geckoTitle = title
                                 }
+
+                                override fun onFullScreen(session: GeckoSession, fullScreen: Boolean) {
+                                    Log.d("GeckoEngine", "fullscreen $fullScreen")
+                                    onGeckoFullScreen(fullScreen)
+                                }
                             }
                     // Gecko says when a text field gains focus, in any frame (the app's JS check
                     // only sees the top document, e.g. not Plex's sign-in frame). Show the app's
@@ -449,6 +456,95 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         } catch (e: Exception) {
             Log.e("GeckoEngine", "onPageFinished failed", e)
         }
+        val zoom = effectiveWebZoom()
+        if (zoom != 1f) {
+            webView.evaluateJavascript("document.body && (document.body.style.zoom = '$zoom');", null)
+        }
+    }
+
+    // GeckoView lays websites out tighter than the WebView did; start them at 90% (the zoom-out
+    // button's first step). App pages are designed for 100%.
+    private fun effectiveWebZoom(): Float {
+        val base =
+                if (geckoSession != null && webView.url?.startsWith("file:///android_asset/") != true) 0.9f
+                else 1f
+        return currentWebZoom * base
+    }
+
+    private var geckoFullScreen = false
+
+    // Page fullscreen (video players) goes through the same path as WebView's onShowCustomView:
+    // TapLink's fullscreen overlay hides its UI and scrollbars and shows its own media controls.
+    private fun onGeckoFullScreen(fullScreen: Boolean) {
+        val gecko = geckoView ?: return
+        if (fullScreen == geckoFullScreen) return
+        geckoFullScreen = fullScreen
+        val client = webView.webChromeClient ?: return
+        if (fullScreen) {
+            client.onShowCustomView(
+                    gecko,
+                    object : WebChromeClient.CustomViewCallback {
+                        override fun onCustomViewHidden() {
+                            // TapLink closed its overlay (exit button, Back): leave page fullscreen too
+                            if (geckoFullScreen) {
+                                geckoFullScreen = false
+                                geckoSession?.exitFullScreen()
+                            }
+                            post { attachGeckoView() }
+                        }
+                    }
+            )
+        } else {
+            client.onHideCustomView()
+            post { attachGeckoView() }
+        }
+    }
+
+    // The WebView never got hover events; Gecko pages (e.g. video players showing their controls)
+    // react to the cursor when it moves like a mouse.
+    private var lastGeckoHoverAt = 0L
+    private val geckoHoverLocation = IntArray(2)
+
+    private fun dispatchGeckoHover(screenX: Float, screenY: Float) {
+        val gecko = geckoView ?: return
+        if (geckoFullScreen || gecko.parent == null) return
+        val now = SystemClock.uptimeMillis()
+        if (now - lastGeckoHoverAt < 33) return
+        lastGeckoHoverAt = now
+        webView.getLocationOnScreen(geckoHoverLocation)
+        val translatedX = screenX - geckoHoverLocation[0]
+        val translatedY = screenY - geckoHoverLocation[1]
+        val scale = if (uiScale <= 0f) 1f else uiScale
+        val x: Float
+        val y: Float
+        if (isAnchored) {
+            val rotationRad = Math.toRadians(leftEyeUIContainer.rotation.toDouble())
+            val cos = Math.cos(rotationRad).toFloat()
+            val sin = Math.sin(rotationRad).toFloat()
+            x = (translatedX * cos + translatedY * sin) / scale
+            y = (-translatedX * sin + translatedY * cos) / scale
+        } else {
+            x = translatedX / scale
+            y = translatedY / scale
+        }
+        if (x < 0f || y < 0f || x > gecko.width || y > gecko.height) return
+        val properties =
+                MotionEvent.PointerProperties().apply {
+                    id = 0
+                    toolType = MotionEvent.TOOL_TYPE_MOUSE
+                }
+        val coords =
+                MotionEvent.PointerCoords().apply {
+                    this.x = x
+                    this.y = y
+                }
+        val event =
+                MotionEvent.obtain(
+                        now, now, MotionEvent.ACTION_HOVER_MOVE, 1, arrayOf(properties), arrayOf(coords),
+                        0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_MOUSE, 0
+                )
+        gecko.dispatchGenericMotionEvent(event)
+        event.recycle()
     }
 
     private fun onGeckoProgress(progress: Int) {
@@ -1578,6 +1674,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
             // Pass screen coordinates - buttons also use screen coordinates
             updateButtonHoverStates(screenX, screenY, force = isAnchored)
+            dispatchGeckoHover(screenX, screenY)
         }
         listener?.onCursorPositionChanged(lastCursorX, lastCursorY, pendingCursorVisible)
     }
@@ -5171,6 +5268,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         chatView.handleAnchoredTap(finalX, finalY)
     }
 
+    /** Whether a screen point is over the visible keyboard panel, by its on-screen bounds. */
+    fun isPointOverKeyboard(screenX: Float, screenY: Float): Boolean =
+            keyboardContainer.visibility == View.VISIBLE && isOver(keyboardContainer, screenX, screenY)
+
     fun isPointInKeyboard(screenX: Float, screenY: Float): Boolean {
         if (keyboardContainer.visibility != View.VISIBLE) return false
         val kbView = customKeyboard ?: return false
@@ -6255,7 +6356,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         webView.evaluateJavascript(
                 """
         (function() {
-            document.body.style.zoom = "$currentWebZoom";
+            document.body.style.zoom = "${effectiveWebZoom()}";
         })();
     """,
                 null
@@ -7185,7 +7286,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     webView.evaluateJavascript(
                             """
                         (function() {
-                            document.body.style.zoom = "$currentWebZoom";
+                            document.body.style.zoom = "${effectiveWebZoom()}";
                         })();
                     """,
                             null

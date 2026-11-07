@@ -2900,9 +2900,12 @@ class MainActivity :
         }
 
         // Hit test for custom keyboard first so clicks never pass through it.
+        // isPointOverKeyboard also covers the keyboard's right edge, where taps reached the
+        // scrollbar underneath
         if (isKeyboardVisible &&
                         wasKeyboardVisibleAtDown &&
-                        dualWebViewGroup.isPointInKeyboard(interactionX, interactionY)
+                        (dualWebViewGroup.isPointInKeyboard(interactionX, interactionY) ||
+                                dualWebViewGroup.isPointOverKeyboard(interactionX, interactionY))
         ) {
             // Anchored mode needs explicit dispatch; non-anchored is handled by the view itself.
             if (isAnchored) {
