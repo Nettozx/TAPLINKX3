@@ -5749,6 +5749,15 @@ class MainActivity :
         hideCustomKeyboard()
     }
 
+    // Debug: `am start ... --es gecko_url <url>` while TapLink is running loads that URL
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        intent.getStringExtra(GeckoEngine.EXTRA_URL)?.let { url ->
+            android.util.Log.d("GeckoEngine", "debug url ${url.take(80)}")
+            webView.loadUrl(url)
+        }
+    }
+
     override fun onRefreshPressed() {
         // GeckoView: reload for real. Loading the same URL is only a hash change on single-page
         // apps (Plex), which left the device-width viewport below and skipped the site zoom.

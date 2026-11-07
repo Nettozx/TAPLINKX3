@@ -418,6 +418,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                     post { showExtensionPopupSession(session) }
                                 }
 
+                                override fun closeExtensionSession(session: GeckoSession) {
+                                    post { if (extensionPopup === session) closeExtensionPopup() }
+                                }
+
                                 override fun openExtensionUrl(url: String) {
                                     post {
                                         closeExtensionPopup()

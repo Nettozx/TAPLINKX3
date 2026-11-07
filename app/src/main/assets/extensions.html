@@ -242,6 +242,11 @@
 
       renderRecommended();
 
+      // Coming back to this page from history restores it without rerunning this script
+      window.addEventListener("pageshow", (e) => {
+        if (e.persisted && api()) api().refresh();
+      });
+
       // The app's bridge defines TapLinkExtensions shortly after the page loads
       let tries = 0;
       (function waitForApi() {

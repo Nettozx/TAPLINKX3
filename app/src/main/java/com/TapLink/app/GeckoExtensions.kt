@@ -18,8 +18,11 @@ import org.mozilla.geckoview.WebExtensionController
 class GeckoExtensions(private val runtime: GeckoRuntime, private val host: Host) {
 
     interface Host {
-        /** Show an add-on popup's session in place of the page until [closePopup]. */
+        /** Show an add-on popup or tab session in place of the page until Back or it closes. */
         fun showExtensionPopup(session: GeckoSession)
+
+        /** The add-on closed its tab or popup (e.g. Proton VPN after signing in). */
+        fun closeExtensionSession(session: GeckoSession)
 
         /** Load a URL an add-on opened (a new tab, its options page) in the current page. */
         fun openExtensionUrl(url: String)
@@ -40,6 +43,7 @@ class GeckoExtensions(private val runtime: GeckoRuntime, private val host: Host)
                         session: GeckoSession?,
                         action: WebExtension.Action
                 ) {
+                    if (!actions.containsKey(extension.id)) Log.d(TAG, "toolbar button for ${extension.id}")
                     actions[extension.id] = action
                 }
 
@@ -54,21 +58,52 @@ class GeckoExtensions(private val runtime: GeckoRuntime, private val host: Host)
                 ): GeckoResult<GeckoSession>? = popupSession(extension)
             }
 
-    // No multi-tab support yet: add-on tabs and options pages open in the current page
+    // Tabs an add-on opens (sign-in, onboarding) and its options page show like popups: in place of
+    // the page until Back, or until the add-on closes them. Refusing a tab fails the add-on's
+    // tabs.create() ("Cannot create new tab"), which left Proton VPN's login button dead.
     private val tabDelegate =
             object : WebExtension.TabDelegate {
                 override fun onNewTab(
                         source: WebExtension,
                         createDetails: WebExtension.CreateTabDetails
                 ): GeckoResult<GeckoSession>? {
-                    createDetails.url?.let { host.openExtensionUrl(it) }
-                    return null
+                    Log.d(TAG, "${source.id} opens a tab: ${createDetails.url}")
+                    val session = newSession(source)
+                    host.showExtensionPopup(session)
+                    return GeckoResult.fromValue(session)
                 }
 
                 override fun onOpenOptionsPage(source: WebExtension) {
-                    source.metaData.optionsPageUrl?.let { host.openExtensionUrl(it) }
+                    openOptionsPage(source)
                 }
             }
+
+    private val sessionTabDelegate =
+            object : WebExtension.SessionTabDelegate {
+                override fun onCloseTab(
+                        source: WebExtension?,
+                        session: GeckoSession
+                ): GeckoResult<AllowOrDeny> {
+                    Log.d(TAG, "${source?.id} closes its tab")
+                    host.closeExtensionSession(session)
+                    return GeckoResult.allow()
+                }
+            }
+
+    private fun newSession(extension: WebExtension): GeckoSession {
+        val session = GeckoSession()
+        if (!session.isOpen) session.open(runtime)
+        session.webExtensionController.setTabDelegate(extension, sessionTabDelegate)
+        return session
+    }
+
+    private fun openOptionsPage(extension: WebExtension): Boolean {
+        val url = extension.metaData.optionsPageUrl ?: return false
+        val session = newSession(extension)
+        session.loadUri(url)
+        host.showExtensionPopup(session)
+        return true
+    }
 
     init {
         // The user picks what to install from TapLink's Extensions page, so accept the
@@ -105,8 +140,7 @@ class GeckoExtensions(private val runtime: GeckoRuntime, private val host: Host)
 
     private fun popupSession(extension: WebExtension): GeckoResult<GeckoSession> {
         Log.d(TAG, "popup for ${extension.id}")
-        val session = GeckoSession()
-        if (!session.isOpen) session.open(runtime)
+        val session = newSession(extension)
         host.showExtensionPopup(session)
         return GeckoResult.fromValue(session)
     }
@@ -120,6 +154,7 @@ class GeckoExtensions(private val runtime: GeckoRuntime, private val host: Host)
     fun refresh() {
         controller.list().accept(
                 { list ->
+                    Log.d(TAG, "list: " + list.orEmpty().joinToString { "${it.id}${if (it.isBuiltIn) "(built-in)" else ""}/${it.metaData.enabled}" })
                     extensions = list.orEmpty().filter { !it.isBuiltIn }
                     extensions.forEach(::attach)
                     host.extensionsChanged()
@@ -150,18 +185,17 @@ class GeckoExtensions(private val runtime: GeckoRuntime, private val host: Host)
 
     /** Opens the add-on's toolbar popup; false if it has none. */
     fun openPopup(id: String): Boolean {
-        val action = actions[id] ?: return false
+        val action = actions[id]
+        Log.d(TAG, "open popup $id: ${if (action != null) "clicking its button" else "no toolbar button"}")
+        action ?: return false
         action.click()
         return true
     }
 
-    fun openOptions(id: String): Boolean {
-        val url = find(id)?.metaData?.optionsPageUrl ?: return false
-        host.openExtensionUrl(url)
-        return true
-    }
+    fun openOptions(id: String): Boolean = find(id)?.let { openOptionsPage(it) } ?: false
 
     fun setEnabled(id: String, enabled: Boolean) {
+        Log.d(TAG, "set $id enabled=$enabled (known: ${find(id) != null})")
         val extension = find(id) ?: return
         val result =
                 if (enabled) controller.enable(extension, WebExtensionController.EnableSource.USER)
