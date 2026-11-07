@@ -19,7 +19,7 @@ android {
     defaultConfig {
         applicationId = "com.TapLinkX3.app"
         minSdk = 29
-        // The glasses (and the GeckoView artifact) are arm64-only; Vosk ships four ABIs
+        // The glasses (and the GeckoView artifact) are arm64-only
         ndk { abiFilters += "arm64-v8a" }
         targetSdk = 36
         versionCode = 15
@@ -98,9 +98,6 @@ dependencies {
     implementation(libs.androidx.recyclerview)
     implementation(libs.androidx.webkit)
     implementation(libs.mozilla.geckoview)
-    implementation(libs.vosk.android)
-    // JNA as an Android library (native libs); Vosk needs the AAR, not the jar
-    implementation(variantOf(libs.jna) { artifactType("aar") })
 
     // Google
     implementation(libs.material)

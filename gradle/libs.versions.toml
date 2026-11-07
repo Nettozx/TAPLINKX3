@@ -17,9 +17,6 @@ coroutines = "1.10.0"
 gson = "2.11.0"
 # 154+ need compileSdk 37 (AGP 9); stay on 153 until AGP is upgraded
 geckoview = "153.0.20260810162159"
-# Offline voice typing
-vosk = "0.3.75"
-jna = "5.18.1"
 zxingEmbedded = "4.3.0"
 
 [libraries]
@@ -40,8 +37,6 @@ kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-cor
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 # arm64-only GeckoView: the glasses are arm64, and the multi-ABI artifact would bloat the APK
 mozilla-geckoview = { group = "org.mozilla.geckoview", name = "geckoview-arm64-v8a", version.ref = "geckoview" }
-vosk-android = { group = "com.alphacephei", name = "vosk-android", version.ref = "vosk" }
-jna = { group = "net.java.dev.jna", name = "jna", version.ref = "jna" }
 zxing-embedded = { group = "com.journeyapps", name = "zxing-android-embedded", version.ref = "zxingEmbedded" }
 
 [plugins]

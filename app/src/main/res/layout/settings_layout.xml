@@ -211,10 +211,9 @@
         <!-- Groq API Key Button -->
         <Button
             android:id="@+id/btnGroqApiKey"
-            android:visibility="gone"
             android:layout_width="match_parent"
             android:layout_height="28dp"
-            android:text="Enter Groq API Key"
+            android:text="Voice typing: Groq API key"
             android:textColor="#82B1FF"
             android:textSize="11sp"
             android:layout_marginTop="8dp"

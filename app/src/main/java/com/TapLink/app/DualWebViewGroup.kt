@@ -1585,6 +1585,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
     }
 
+    private var geckoVerticalClipping = 0
+
     fun updateScrollBarsVisibility() {
         // DebugLog.d("ScrollDebug", "updateScrollBarsVisibility called. isAnchored=$isAnchored,
         // isInScrollMode=$isInScrollMode, uiScale=$uiScale")
@@ -1607,14 +1609,24 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
             )
         }
-        val keyboardHeight =
+        val shownKeyboardHeight =
                 if (keyboardVisible) {
                     val measured = keyboardContainer.measuredHeight
                     if (measured > 0) measured else 160
                 } else {
                     0
                 }
-        val baseBottomMargin = if (keyboardVisible) 0 else rawBottomMargin
+        // GeckoView: the keyboard overlays the page instead of shrinking it. A layout resize looks
+        // like a screen change to pages (Google Maps closed its direction boxes as you typed);
+        // Gecko is told how much of the bottom is covered instead, as a mobile browser does.
+        val keyboardResizesPage = !geckoEnabled
+        val keyboardHeight = if (keyboardResizesPage) shownKeyboardHeight else 0
+        val clipping = (shownKeyboardHeight - rawBottomMargin).coerceAtLeast(0)
+        if (geckoView != null && clipping != geckoVerticalClipping) {
+            geckoVerticalClipping = clipping
+            geckoView.setVerticalClipping(clipping)
+        }
+        val baseBottomMargin = if (keyboardVisible && keyboardResizesPage) 0 else rawBottomMargin
 
         // If anchored (or in GeckoView page fullscreen), scrollbars are always hidden
         // The scrollbar scrolls the page through the bridge, which add-on popups don't have
@@ -4607,7 +4619,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         if (isInScrollMode || isNavBarsHidden || geckoFullScreen) {
             val keyboardLimit =
-                    if (isKeyboardVisible) {
+                    if (isKeyboardVisible && !geckoEnabled) {
                         eyeHeight - keyboardHeight // Shrink to fit above keyboard
                     } else {
                         480
@@ -4626,7 +4638,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             val navBarTop = eyeHeight - navBarHeight
 
             val keyboardLimit =
-                    if (isKeyboardVisible) {
+                    if (isKeyboardVisible && !geckoEnabled) {
                         minOf(navBarTop, eyeHeight - keyboardHeight) // Shrink to fit above keyboard
                     } else {
                         navBarTop // Default bottom for 30px nav bar

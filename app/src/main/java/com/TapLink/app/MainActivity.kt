@@ -535,6 +535,12 @@ class MainActivity :
         super.onCreate(savedInstanceState)
         // Before the views are inflated: DualWebViewGroup reads it when it's created
         GeckoEngine.applyIntentToggle(this, intent)
+        // Offline voice typing (Vosk) was removed: free its downloaded models (~170 MB)
+        Thread {
+                    filesDir.listFiles { file -> file.isDirectory && file.name.startsWith("vosk-model") }
+                            ?.forEach { it.deleteRecursively() }
+                }
+                .start()
         // Set window background to black immediately
         window.setBackgroundDrawableResource(android.R.color.black)
 
@@ -2304,37 +2310,25 @@ class MainActivity :
         }
     }
 
-    // Offline voice typing (Vosk): the glasses' own recognizer (RayNeo's) doesn't answer other
-    // apps, and Groq needed an API key and a connection
-    private var offlineSpeech: OfflineSpeech? = null
-
+    // Voice typing with Groq (Whisper): the glasses' own recognizer (RayNeo's) doesn't answer other
+    // apps, and offline Vosk was too inaccurate on the glasses' microphone. Needs a Groq API key,
+    // asked for on first use (also under Settings).
     private fun toggleSystemSpeech() {
-        val speech =
-                offlineSpeech
-                        ?: OfflineSpeech(
-                                        this,
-                                        object : OfflineSpeech.Callbacks {
-                                            override fun onStatus(text: String) {
-                                                dualWebViewGroup.showToast(text, 2500L)
-                                            }
-
-                                            override fun onListening(active: Boolean) {
-                                                isListeningForSpeech = active
-                                                keyboardView?.setMicActive(active)
-                                                setVoiceAssistantAudioRoute(active)
-                                            }
-
-                                            override fun onText(text: String) {
-                                                handleVoiceResult(text)
-                                            }
-
-                                            override fun onError(message: String) {
-                                                dualWebViewGroup.showToast(message)
-                                            }
-                                        }
-                                )
-                                .also { offlineSpeech = it }
-        speech.toggle()
+        if (groqAudioService == null) initializeGroqService()
+        val groq = groqAudioService ?: return
+        if (!groq.hasApiKey()) {
+            showGroqKeyDialog()
+            return
+        }
+        if (groq.isRecording()) {
+            groq.stopRecording()
+            setVoiceAssistantAudioRoute(false)
+            dualWebViewGroup.showToast("Processing...")
+        } else {
+            setVoiceAssistantAudioRoute(true)
+            groq.startRecording()
+            dualWebViewGroup.showToast("Listening...")
+        }
     }
 
     fun showGroqKeyDialog() {
@@ -4554,6 +4548,13 @@ class MainActivity :
     }
 
     private fun tryRestoreSession() {
+        // GeckoView: TapLink's window restore already gave the active window its page. This older
+        // single-page restore would load the last URL TapLink saved, which with a page per window
+        // can be another window's, replacing the one that was open.
+        if (dualWebViewGroup.isGeckoEngine() && !webView.url.isNullOrEmpty()) {
+            DebugLog.d("WebViewDebug", "Windows restored; skipping the single-page restore")
+            return
+        }
         // Before loading the initial page, try to restore the previous session
         DebugLog.d("WebViewDebug", "Attempting to restore previous session")
 
@@ -6786,8 +6787,6 @@ class MainActivity :
 
     override fun onDestroy() {
         super.onDestroy()
-        offlineSpeech?.release()
-        offlineSpeech = null
         if (::controllerBluetoothClient.isInitialized) {
             controllerBluetoothClient.stop()
         }
