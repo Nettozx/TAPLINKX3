@@ -17,7 +17,8 @@ import org.vosk.android.RecognitionListener
 import org.vosk.android.SpeechService
 
 /**
- * Offline voice typing with Vosk. The small English model (~40 MB) is downloaded once into the
+ * Offline voice typing with Vosk. The English "lgraph" model (~130 MB, more accurate than the
+ * 40 MB small one) is downloaded once into the
  * app's files on first use; recognition then runs on the glasses without a connection. One
  * utterance per [toggle]: listening stops at the first pause and the text is delivered.
  * Callbacks arrive on the main thread.
@@ -61,6 +62,7 @@ class OfflineSpeech(private val context: Context, private val callbacks: Callbac
         preparing = true
         worker.execute {
             try {
+                File(context.filesDir, OLD_MODEL_NAME).let { if (it.exists()) it.deleteRecursively() }
                 if (!File(modelDir, READY_MARKER).exists()) download()
                 main.post { callbacks.onStatus("Loading voice model…") }
                 val newModel = Model(modelDir.absolutePath)
@@ -148,7 +150,7 @@ class OfflineSpeech(private val context: Context, private val callbacks: Callbac
 
     private fun download() {
         val partial = File(context.cacheDir, "$MODEL_NAME.zip")
-        main.post { callbacks.onStatus("Downloading voice model (40 MB)…") }
+        main.post { callbacks.onStatus("Downloading voice model (130 MB)…") }
         val connection = URL(MODEL_URL).openConnection() as HttpURLConnection
         connection.connectTimeout = 15000
         connection.readTimeout = 30000
@@ -217,7 +219,9 @@ class OfflineSpeech(private val context: Context, private val callbacks: Callbac
 
     companion object {
         private const val TAG = "OfflineSpeech"
-        private const val MODEL_NAME = "vosk-model-small-en-us-0.15"
+        private const val MODEL_NAME = "vosk-model-en-us-0.22-lgraph"
+        // Earlier, less accurate model: removed when the new one is set up
+        private const val OLD_MODEL_NAME = "vosk-model-small-en-us-0.15"
         private const val MODEL_URL = "https://alphacephei.com/vosk/models/$MODEL_NAME.zip"
         private const val SAMPLE_RATE = 16000f
         private const val READY_MARKER = ".taplink-ready"
