@@ -5536,6 +5536,30 @@ class MainActivity :
         }
     }
 
+    // GeckoView page fullscreen: fade the cursor out after a few seconds without movement, like a
+    // video player; it comes back when it moves. Alpha only, so the visibility logic is untouched.
+    private val hideIdleFullScreenCursor = Runnable {
+        if (dualWebViewGroup.isGeckoFullScreen()) cursorLeftView.alpha = 0f
+    }
+    private var idleCursorX = Float.NaN
+    private var idleCursorY = Float.NaN
+
+    private fun updateFullScreenCursorIdle(x: Float, y: Float) {
+        if (!dualWebViewGroup.isGeckoFullScreen()) {
+            handler.removeCallbacks(hideIdleFullScreenCursor)
+            idleCursorX = Float.NaN
+            if (cursorLeftView.alpha != 1f) cursorLeftView.alpha = 1f
+            return
+        }
+        if (idleCursorX.isNaN() || abs(x - idleCursorX) >= 0.5f || abs(y - idleCursorY) >= 0.5f) {
+            idleCursorX = x
+            idleCursorY = y
+            cursorLeftView.alpha = 1f
+            handler.removeCallbacks(hideIdleFullScreenCursor)
+            handler.postDelayed(hideIdleFullScreenCursor, 3000)
+        }
+    }
+
     override fun onCursorPositionChanged(x: Float, y: Float, isVisible: Boolean) {
         val scale = dualWebViewGroup.uiScale
         val shouldRenderCursor = isVisible && !isMouseTapMode
@@ -5555,6 +5579,8 @@ class MainActivity :
         // Note: We use a small buffer (e.g. -20 to 660) if we want to allow partial cursor
         // visibility at edges,
         // but strictly preventing wrapping means keeping it to the 640 boundary.
+
+        updateFullScreenCursorIdle(visualX, visualY)
 
         val showLeft = shouldRenderCursor && visualX < 640f
         // The right eye is a PixelCopy mirror of the left-eye window region, so it already

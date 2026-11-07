@@ -531,6 +531,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             postDelayed({ if (geckoFullScreen == fullScreen) applyWebZoom(effectiveWebZoom()) }, 700)
         }
         if (fullScreen) postDelayed({ logGeckoFullScreenGeometry() }, 800)
+        // Let the cursor start (or stop) its fullscreen idle hide
+        listener?.onCursorPositionChanged(lastCursorX, lastCursorY, pendingCursorVisible)
     }
 
     private fun logGeckoFullScreenGeometry() {
@@ -6203,6 +6205,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     fun isGeckoEngine(): Boolean = geckoSession != null
+
+    fun isGeckoFullScreen(): Boolean = geckoFullScreen
 
     fun isToggleBarVisible(): Boolean {
         return !geckoFullScreen && leftToggleBar.visibility == View.VISIBLE
