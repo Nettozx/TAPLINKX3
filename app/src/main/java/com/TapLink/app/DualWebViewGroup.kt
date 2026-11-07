@@ -496,6 +496,29 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             geckoFullScreenHidden.clear()
         }
         updateScrollBarsVisibility()
+        // The site zoom (body CSS zoom) also scales the fullscreen element's layout, which throws
+        // off players' sizing and subtitle placement. Drop it while fullscreen.
+        val zoom = if (fullScreen) "" else effectiveWebZoom().takeIf { it != 1f }?.toString() ?: ""
+        if (webView.url?.startsWith("file:///android_asset/") != true) {
+            webView.evaluateJavascript("document.body && (document.body.style.zoom = '$zoom');", null)
+        }
+        if (fullScreen) postDelayed({ logGeckoFullScreenGeometry() }, 800)
+    }
+
+    private fun logGeckoFullScreenGeometry() {
+        val gecko = geckoView ?: return
+        gecko.getLocationOnScreen(geckoHoverLocation)
+        Log.d(
+                "GeckoEngine",
+                "fullscreen view ${gecko.width}x${gecko.height} at ${geckoHoverLocation[0]},${geckoHoverLocation[1]} " +
+                        "container ${webViewsContainer.width}x${webViewsContainer.height} uiScale=$uiScale " +
+                        "trans=${leftEyeUIContainer.translationX},${leftEyeUIContainer.translationY}"
+        )
+        webView.evaluateJavascript(
+                "(function(){var f=document.fullscreenElement;var r=f&&f.getBoundingClientRect();" +
+                        "return innerWidth+'x'+innerHeight+' screen '+screen.width+'x'+screen.height+' dpr '+devicePixelRatio+" +
+                        "' fs '+(f?f.tagName+' '+Math.round(r.left)+','+Math.round(r.top)+' '+Math.round(r.width)+'x'+Math.round(r.height):'none');})()"
+        ) { result -> Log.d("GeckoEngine", "fullscreen page $result") }
     }
 
     /** Back: leaves page fullscreen on GeckoView. False when not in it. */

@@ -1126,6 +1126,8 @@ class MainActivity :
                             }
 
                             private fun performDoubleTapBackNavigation() {
+                                // Double tap is TapLink's Back: leave page fullscreen first
+                                if (dualWebViewGroup.exitGeckoFullScreen()) return
                                 val hasHistory = webView.canGoBack()
 
                                 if (!hasHistory) {
