@@ -360,6 +360,7 @@ class MainActivity :
                             hideFullScreenCustomView()
                         }
                         dualWebViewGroup.exitGeckoFullScreen() -> {}
+                        dualWebViewGroup.closeExtensionPopup() -> {}
                         isKeyboardVisible || dualWebViewGroup.isUrlEditing() -> {
                             // Hide keyboard and exit URL editing
                             hideCustomKeyboard()
@@ -1128,6 +1129,7 @@ class MainActivity :
                             private fun performDoubleTapBackNavigation() {
                                 // Double tap is TapLink's Back: leave page fullscreen first
                                 if (dualWebViewGroup.exitGeckoFullScreen()) return
+                                if (dualWebViewGroup.closeExtensionPopup()) return
                                 val hasHistory = webView.canGoBack()
 
                                 if (!hasHistory) {

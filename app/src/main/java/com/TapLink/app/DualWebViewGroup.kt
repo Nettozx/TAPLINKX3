@@ -60,6 +60,8 @@ import kotlin.math.roundToInt
 import org.json.JSONObject
 import java.util.WeakHashMap
 
+private const val EXTENSIONS_PAGE_URL = "file:///android_asset/extensions.html"
+
 @SuppressLint("ClickableViewAccessibility")
 class DualWebViewGroup
 @JvmOverloads
@@ -269,6 +271,20 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private var forwardingToGecko = false
     private var geckoTitle: String? = null
 
+    // Gecko says when a text field gains focus, in any frame (the app's JS check only sees the top
+    // document, e.g. not Plex's sign-in frame). Show the app's keyboard instead of the system one.
+    private val geckoTextInputDelegate =
+            object : GeckoSession.TextInputDelegate {
+                override fun showSoftInput(session: GeckoSession) {
+                    Log.d("GeckoEngine", "showSoftInput")
+                    post { keyboardListener?.onShowKeyboard() }
+                }
+
+                override fun hideSoftInput(session: GeckoSession) {
+                    Log.d("GeckoEngine", "hideSoftInput")
+                }
+            }
+
     private val geckoBridge: GeckoBridge? = if (GeckoEngine.isEnabled(context)) GeckoBridge() else null
 
     private val geckoSession: GeckoSession? =
@@ -337,18 +353,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     // Gecko says when a text field gains focus, in any frame (the app's JS check
                     // only sees the top document, e.g. not Plex's sign-in frame). Show the app's
                     // keyboard instead of the system one.
-                    textInput.setDelegate(
-                            object : GeckoSession.TextInputDelegate {
-                                override fun showSoftInput(session: GeckoSession) {
-                                    Log.d("GeckoEngine", "showSoftInput")
-                                    post { keyboardListener?.onShowKeyboard() }
-                                }
-
-                                override fun hideSoftInput(session: GeckoSession) {
-                                    Log.d("GeckoEngine", "hideSoftInput")
-                                }
-                            }
-                    )
+                    textInput.setDelegate(geckoTextInputDelegate)
                     open(GeckoEngine.runtime(context))
                     val bridge = geckoBridge
                     if (bridge != null) {
@@ -399,13 +404,128 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         attachGeckoView()
     }
 
+    // Add-on popups (Dark Reader's switch, Proton VPN's sign-in) replace the page in the GeckoView
+    // until Back or the popup closes itself
+    private var extensionPopup: GeckoSession? = null
+
+    private val geckoExtensions: GeckoExtensions? =
+            if (geckoSession == null) null
+            else
+                    GeckoExtensions(
+                            GeckoEngine.runtime(context),
+                            object : GeckoExtensions.Host {
+                                override fun showExtensionPopup(session: GeckoSession) {
+                                    post { showExtensionPopupSession(session) }
+                                }
+
+                                override fun openExtensionUrl(url: String) {
+                                    post {
+                                        closeExtensionPopup()
+                                        geckoSession?.loadUri(url)
+                                    }
+                                }
+
+                                override fun extensionsChanged() {
+                                    post { pushExtensionsToPage() }
+                                }
+
+                                override fun extensionMessage(text: String) {
+                                    post {
+                                        showToast(text, 2500L)
+                                        if (isExtensionsPageOpen()) {
+                                            webView.evaluateJavascript(
+                                                    "window.extensionStatus && window.extensionStatus(${org.json.JSONObject.quote(text)})",
+                                                    null
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                    )
+
+    init {
+        if (geckoExtensions != null) geckoBridge?.addInterface(ExtensionsJsInterface(), "TapLinkExtensions")
+    }
+
+    private fun showExtensionPopupSession(session: GeckoSession) {
+        val gecko = geckoView ?: return
+        closeExtensionPopup()
+        session.textInput.setDelegate(geckoTextInputDelegate)
+        session.contentDelegate =
+                object : GeckoSession.ContentDelegate {
+                    override fun onCloseRequest(session: GeckoSession) {
+                        post { if (extensionPopup === session) closeExtensionPopup() }
+                    }
+                }
+        gecko.releaseSession()
+        gecko.setSession(session)
+        extensionPopup = session
+        Log.d("GeckoEngine", "showing add-on popup")
+    }
+
+    /** Back: closes an open add-on popup and shows the page again. False when none is open. */
+    fun closeExtensionPopup(): Boolean {
+        val popup = extensionPopup ?: return false
+        extensionPopup = null
+        val gecko = geckoView
+        val page = geckoSession
+        if (gecko != null && page != null) {
+            gecko.releaseSession()
+            gecko.setSession(page)
+        }
+        popup.close()
+        return true
+    }
+
+    private fun isExtensionsPageOpen(): Boolean = webView.url == EXTENSIONS_PAGE_URL
+
+    private fun pushExtensionsToPage() {
+        val extensions = geckoExtensions ?: return
+        if (!isExtensionsPageOpen()) return
+        webView.evaluateJavascript("window.renderExtensions && window.renderExtensions(${extensions.toJson()})", null)
+    }
+
+    // window.TapLinkExtensions for the Extensions page. The bridge exposes interfaces to every
+    // page, so act only while that page is the one open, and install only from addons.mozilla.org.
+    private inner class ExtensionsJsInterface {
+        private fun onPage(block: (GeckoExtensions) -> Unit) {
+            post {
+                val extensions = geckoExtensions
+                if (extensions != null && isExtensionsPageOpen()) block(extensions)
+                else Log.w("GeckoExtensions", "ignored a call from ${webView.url}")
+            }
+        }
+
+        @android.webkit.JavascriptInterface fun refresh() = onPage { it.refresh() }
+
+        @android.webkit.JavascriptInterface
+        fun install(url: String) = onPage {
+            if (url.startsWith("https://addons.mozilla.org/")) it.install(url)
+        }
+
+        @android.webkit.JavascriptInterface
+        fun openPopup(id: String) = onPage {
+            if (!it.openPopup(id)) showToast("This add-on has no popup", 2000L)
+        }
+
+        @android.webkit.JavascriptInterface
+        fun openOptions(id: String) = onPage {
+            if (!it.openOptions(id)) showToast("This add-on has no settings page", 2000L)
+        }
+
+        @android.webkit.JavascriptInterface
+        fun setEnabled(id: String, enabled: Boolean) = onPage { it.setEnabled(id, enabled) }
+
+        @android.webkit.JavascriptInterface fun uninstall(id: String) = onPage { it.uninstall(id) }
+    }
+
     /**
      * GeckoView: types into the focused text field, in any frame, the way an IME does (so pages
      * see real input events). Returns false when Gecko has no focused field; callers then fall
      * back to the JS path.
      */
     fun commitTextToGecko(text: String): Boolean {
-        val session = geckoSession ?: return false
+        val session = geckoView?.session ?: geckoSession ?: return false
         val connection = geckoInputConnection(session) ?: return false
         session.textInput.getHandler(handler ?: android.os.Handler(android.os.Looper.getMainLooper())).post {
             connection.commitText(text, 1)
@@ -415,7 +535,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     /** GeckoView: Backspace in the focused text field, like commitTextToGecko. */
     fun sendBackspaceToGecko(): Boolean {
-        val session = geckoSession ?: return false
+        val session = geckoView?.session ?: geckoSession ?: return false
         val connection = geckoInputConnection(session) ?: return false
         session.textInput.getHandler(handler ?: android.os.Handler(android.os.Looper.getMainLooper())).post {
             connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL))

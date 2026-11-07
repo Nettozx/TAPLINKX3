@@ -588,6 +588,7 @@
       <div class="topbar-actions">
         <button class="btn" id="openQrScanner" type="button">QR Scanner</button>
         <button class="btn" id="editToggle" type="button">Edit Links</button>
+        <button class="btn" id="openExtensions" type="button">Extensions</button>
         <button class="btn" id="addLink" type="button">Add Link</button>
 
       </div>
@@ -1016,6 +1017,7 @@
       });
     }
     bindActivate(cancelLink, () => closeModal());
+    bindActivate(document.getElementById('openExtensions'), () => location.assign('extensions.html'));
     ['pointerdown', 'pointerup', 'click', 'touchstart', 'touchend'].forEach((type) => {
       qrPage.addEventListener(type, (event) => {
         event.stopPropagation();
