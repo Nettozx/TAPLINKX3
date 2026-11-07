@@ -67,6 +67,7 @@ class GeckoBridge : WebExtension.MessageDelegate, WebExtension.PortDelegate {
     override fun onConnect(port: WebExtension.Port) {
         Log.d(TAG, "Page connected (${pending.size} pending)")
         this.port = port
+        loggedCalls.clear()
         port.setDelegate(this)
         port.postMessage(interfacesMessage())
         while (pending.isNotEmpty()) port.postMessage(pending.removeFirst())
@@ -97,7 +98,11 @@ class GeckoBridge : WebExtension.MessageDelegate, WebExtension.PortDelegate {
     private fun bridgeMethods(obj: Any): List<Method> =
             obj.javaClass.methods.filter { it.isAnnotationPresent(JavascriptInterface::class.java) }
 
+    // First call of each method per page, to see which page hooks reach the app
+    private val loggedCalls = HashSet<String>()
+
     private fun invoke(iface: String, methodName: String, args: JSONArray?) {
+        if (loggedCalls.add("$iface.$methodName")) Log.d(TAG, "page calls $iface.$methodName $args")
         val obj = interfaces[iface] ?: return
         val argCount = args?.length() ?: 0
         val method =

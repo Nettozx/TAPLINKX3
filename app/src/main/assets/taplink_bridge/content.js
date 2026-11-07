@@ -62,7 +62,8 @@
         result = pageWindow.eval(code);
         stringify = pageWindow.JSON.stringify;
       } catch (e) {
-        if (!(e instanceof EvalError) && String(e).indexOf("Content-Security-Policy") < 0) throw e;
+        // The error comes from the page's compartment, so instanceof EvalError doesn't match
+        if (!isCspError(e)) throw e;
         result = (0, eval)(code);
         stringify = JSON.stringify;
       }
@@ -72,6 +73,35 @@
       log("script " + id + " failed: " + e + " :: " + String(code).slice(0, 120));
     }
     if (id !== undefined && id !== null) send({ type: "result", id: id, value: json });
+  }
+
+  function isCspError(e) {
+    const text = String(e);
+    return (e && e.name === "EvalError") || text.indexOf("CSP") >= 0 || text.indexOf("Content-Security-Policy") >= 0;
+  }
+
+  // Chrome sends a tap's click to the element the touch started on (or one containing it). Gecko
+  // hit-tests again after touchend, so a button that closes an overlay on pointerup lets the click
+  // land on whatever was behind it. Drop those mouse/click events, like Chrome would.
+  function guardClickThrough() {
+    let startTarget = null;
+    let endTime = 0;
+    window.addEventListener("touchstart", (e) => {
+      startTarget = e.touches && e.touches.length === 1 ? e.target : null;
+    }, true);
+    window.addEventListener("touchend", () => {
+      endTime = Date.now();
+    }, true);
+    const filter = (e) => {
+      if (!startTarget || Date.now() - endTime > 800) return;
+      const target = e.target;
+      if (!target || !startTarget.isConnected) return;
+      if (target === startTarget || startTarget.contains(target) || target.contains(startTarget)) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (e.type === "click") startTarget = null;
+    };
+    for (const type of ["mousedown", "mouseup", "click"]) window.addEventListener(type, filter, true);
   }
 
   function onMessage(message) {
@@ -111,5 +141,6 @@
   }
 
   disableDoubleTapDelay();
+  guardClickThrough();
   connect();
 })();
