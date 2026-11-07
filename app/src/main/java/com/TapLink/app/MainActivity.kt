@@ -535,6 +535,7 @@ class MainActivity :
         super.onCreate(savedInstanceState)
         // Before the views are inflated: DualWebViewGroup reads it when it's created
         GeckoEngine.applyIntentToggle(this, intent)
+        applyGroqKeyExtra(intent)
         // Offline voice typing (Vosk) was removed: free its downloaded models (~170 MB)
         Thread {
                     filesDir.listFiles { file -> file.isDirectory && file.name.startsWith("vosk-model") }
@@ -5764,8 +5765,20 @@ class MainActivity :
     }
 
     // Debug: `am start ... --es gecko_url <url>` while TapLink is running loads that URL
+    // Setup over adb: `am start ... --es groq_api_key <key>` saves the voice typing key (typing it
+    // on the glasses' keyboard is slow). The key itself is never logged.
+    private fun applyGroqKeyExtra(intent: Intent?) {
+        val key = intent?.getStringExtra("groq_api_key")?.trim()
+        if (key.isNullOrEmpty()) return
+        intent.removeExtra("groq_api_key")
+        getSharedPreferences("TapLinkPrefs", MODE_PRIVATE).edit().putString("groq_api_key", key).apply()
+        groqAudioService?.setApiKey(key)
+        if (::dualWebViewGroup.isInitialized) dualWebViewGroup.showToast("Groq API key saved")
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        applyGroqKeyExtra(intent)
         intent.getStringExtra(GeckoEngine.EXTRA_URL)?.let { url ->
             android.util.Log.d("GeckoEngine", "debug url ${url.take(80)}")
             webView.loadUrl(url)
