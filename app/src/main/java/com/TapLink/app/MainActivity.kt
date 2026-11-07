@@ -2306,11 +2306,11 @@ class MainActivity :
 
     // Voice typing with the device's speech recognizer (RayNeo's RecognitionService on the X3
     // Pro), replacing the Groq service that needed an API key
-    private var speechRecognizer: SpeechRecognizer? = null
+    private var voiceRecognizer: SpeechRecognizer? = null
 
     private fun toggleSystemSpeech() {
         if (isListeningForSpeech) {
-            speechRecognizer?.stopListening()
+            voiceRecognizer?.stopListening()
             dualWebViewGroup.showToast("Processing...")
             return
         }
@@ -2319,10 +2319,10 @@ class MainActivity :
             return
         }
         val recognizer =
-                speechRecognizer
+                voiceRecognizer
                         ?: SpeechRecognizer.createSpeechRecognizer(this).also {
                             it.setRecognitionListener(speechListener)
-                            speechRecognizer = it
+                            voiceRecognizer = it
                         }
         val intent =
                 Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -6845,8 +6845,8 @@ class MainActivity :
 
     override fun onDestroy() {
         super.onDestroy()
-        speechRecognizer?.destroy()
-        speechRecognizer = null
+        voiceRecognizer?.destroy()
+        voiceRecognizer = null
         if (::controllerBluetoothClient.isInitialized) {
             controllerBluetoothClient.stop()
         }
