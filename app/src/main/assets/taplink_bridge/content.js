@@ -58,17 +58,20 @@
     try {
       let result;
       let stringify;
+      let mode = "page";
       try {
         result = pageWindow.eval(code);
         stringify = pageWindow.JSON.stringify;
       } catch (e) {
         // The error comes from the page's compartment, so instanceof EvalError doesn't match
         if (!isCspError(e)) throw e;
+        mode = "sandbox";
         result = (0, eval)(code);
         stringify = JSON.stringify;
       }
       const encoded = result === undefined ? undefined : stringify(result);
       if (encoded !== undefined) json = encoded;
+      if (json !== "null") log("script " + id + " (" + mode + ") -> " + json.slice(0, 60));
     } catch (e) {
       log("script " + id + " failed: " + e + " :: " + String(code).slice(0, 120));
     }
@@ -102,6 +105,38 @@
       if (e.type === "click") startTarget = null;
     };
     for (const type of ["mousedown", "mouseup", "click"]) window.addEventListener(type, filter, true);
+  }
+
+  // TapLink's scrollbar uses the size its page observer last reported, which only reports on
+  // scroll, resize and added nodes. Pages that grow after a tap (an expanding form) or by style
+  // changes left the bar stale. Ask the observer for a fresh report after taps and size changes.
+  function keepScrollMetricsFresh() {
+    let timer = null;
+    const report = () => {
+      timer = null;
+      try {
+        const fn = window.__taplinkReportScroll || pageWindow.__taplinkReportScroll;
+        if (typeof fn === "function") fn();
+      } catch (e) {
+        // the page's observer isn't injected yet
+      }
+    };
+    const schedule = (delay) => {
+      if (timer === null) timer = setTimeout(report, delay);
+    };
+    window.addEventListener("touchend", () => {
+      setTimeout(report, 400);
+      setTimeout(report, 1300);
+      setTimeout(report, 2600);
+    }, true);
+    const observe = () => {
+      if (typeof ResizeObserver !== "function") return;
+      const observer = new ResizeObserver(() => schedule(250));
+      observer.observe(document.documentElement);
+      if (document.body) observer.observe(document.body);
+    };
+    if (document.body) observe();
+    else document.addEventListener("DOMContentLoaded", observe, { once: true });
   }
 
   function onMessage(message) {
@@ -142,5 +177,6 @@
 
   disableDoubleTapDelay();
   guardClickThrough();
+  keepScrollMetricsFresh();
   connect();
 })();
