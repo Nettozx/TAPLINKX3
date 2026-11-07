@@ -478,7 +478,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                             "if(!m){m=document.createElement('meta');m.name='viewport';" +
                             "(document.head||document.documentElement).appendChild(m);}" +
                             (if (nudge) "m.content='width=${width + 1}';" else "") +
-                    "requestAnimationFrame(function(){m.content='width=$width';});" +
+                    // Separate from the nudge by a few frames, or Gecko sees no change
+                    "setTimeout(function(){m.content='width=$width';}," + (if (nudge) 400 else 0) + ");" +
                     "if(document.body)document.body.style.zoom='';})();"
                 } else {
                     "document.body && (document.body.style.zoom = '$zoom');"

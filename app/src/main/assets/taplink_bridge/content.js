@@ -172,6 +172,27 @@
     };
     document.addEventListener("play", report, true);
     document.addEventListener("pause", report, true);
+    // Who calls play()/pause(): the page's stack, so engine-initiated pauses show as having none
+    try {
+      const proto = pageWindow.HTMLMediaElement.prototype;
+      for (const name of ["play", "pause"]) {
+        const original = proto[name];
+        exportFunction(function () {
+          let stack = "";
+          try {
+            stack = String(new pageWindow.Error().stack).split("\n").slice(1, 4)
+              .map((line) => line.replace(/https?:\/\/[^ ]*\//, "").slice(0, 70)).join(" | ");
+          } catch (e) {
+            // no stack
+          }
+          note("call:" + name);
+          log("media call " + name + " :: " + stack);
+          return original.apply(this, arguments);
+        }, proto, { defineAs: name });
+      }
+    } catch (e) {
+      log("media call tracing failed: " + e);
+    }
     // Buffering, to tell a stalling player from one being toggled
     for (const type of ["waiting", "stalled", "canplay", "playing", "seeking", "seeked", "suspend"]) {
       document.addEventListener(type, (e) => {
