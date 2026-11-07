@@ -143,7 +143,13 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         override fun getUrl(): String? {
             val tab = geckoTab ?: return super.getUrl()
-            return tab.url
+            return tab.url ?: tab.deferredUrl
+        }
+
+        /** Restore: load [url] when this window is first shown (GeckoView), now otherwise. */
+        fun loadWhenShown(url: String) {
+            val tab = geckoTab
+            if (tab == null || tab === currentGeckoTab) loadUrl(url) else tab.deferredUrl = url
         }
 
         override fun getTitle(): String? {
@@ -414,6 +420,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private inner class GeckoTab(val owner: InternalWebView) {
         val bridge = GeckoBridge()
         var url: String? = null
+
+        // A restored window's URL, loaded the first time the window is shown: restoring every
+        // window's page at once made startup take 15-20 s on the glasses
+        var deferredUrl: String? = null
         var title: String? = null
         var canGoBack = false
         var canGoForward = false
@@ -436,6 +446,16 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                         session: GeckoSession,
                                         request: GeckoSession.NavigationDelegate.LoadRequest
                                 ): GeckoResult<AllowOrDeny>? {
+                                    // App hand-offs (Google Maps' "open in the app" for navigation,
+                                    // intent: links): there are no such apps on the glasses, and
+                                    // following them leaves a blank page
+                                    val uri = request.uri
+                                    if (uri.startsWith("intent:") ||
+                                                    (uri.contains("maps.app.goo.gl") && uri.contains("apn="))
+                                    ) {
+                                        post { showToast("That needs an Android app; staying on this page", 2500L) }
+                                        return GeckoResult.fromValue(AllowOrDeny.DENY)
+                                    }
                                     // Links that ask for a new window open in this window's page
                                     if (request.target == GeckoSession.NavigationDelegate.TARGET_WINDOW_NEW) {
                                         session.loadUri(request.uri)
@@ -532,10 +552,17 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             geckoSession?.exitFullScreen()
             onGeckoFullScreen(false)
         }
+        // Hidden windows are inactive, so Gecko throttles them
+        currentGeckoTab?.session?.let { if (it.isOpen) it.setActive(false) }
         currentGeckoTab = tab
         if (gecko.session !== tab.session) {
             gecko.releaseSession()
             gecko.setSession(tab.session)
+        }
+        tab.session.setActive(true)
+        tab.deferredUrl?.let { url ->
+            tab.deferredUrl = null
+            tab.owner.loadUrl(url)
         }
         geckoExtensions?.setActiveSession(tab.session)
         // Debug URL from the launch intent, after tab restore loads the saved URL
@@ -699,14 +726,27 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         return true
     }
 
-    // Null when no editable element has focus
-    private fun geckoInputConnection(session: GeckoSession): InputConnection? =
-            try {
-                session.textInput.onCreateInputConnection(EditorInfo())
-            } catch (e: Exception) {
-                Log.w("GeckoEngine", "No input connection", e)
-                null
-            }
+    // Null when no editable element has focus. Gecko drops the field's input connection when the
+    // GeckoView loses Android focus (the keyboard opening can do it): take focus back and retry.
+    private fun geckoInputConnection(session: GeckoSession): InputConnection? {
+        fun create(): InputConnection? =
+                try {
+                    session.textInput.onCreateInputConnection(EditorInfo())
+                } catch (e: Exception) {
+                    Log.w("GeckoEngine", "No input connection", e)
+                    null
+                }
+        create()?.let { return it }
+        val gecko = geckoView ?: return null
+        if (gecko.hasFocus()) {
+            Log.d("GeckoEngine", "typing: no focused field")
+            return null
+        }
+        gecko.requestFocus()
+        val retried = create()
+        Log.d("GeckoEngine", "typing: refocused the GeckoView, field ${if (retried != null) "back" else "still gone"}")
+        return retried
+    }
 
     private fun activeTabBlocksTouch(event: MotionEvent): Boolean =
             webView.touchListener?.onTouch(webView, event) == true
@@ -2728,11 +2768,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     }
 
                     if (!restored) {
-                        if (url.isNotEmpty()) {
-                            newWebView.loadUrl(url)
-                        } else {
-                            newWebView.loadUrl(Constants.DEFAULT_URL)
-                        }
+                        newWebView.loadWhenShown(if (url.isNotEmpty()) url else Constants.DEFAULT_URL)
                     }
 
                     val win = BrowserWindow(id = id, webView = newWebView, title = title)
