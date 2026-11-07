@@ -922,6 +922,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private fun dispatchGeckoHover(screenX: Float, screenY: Float) {
         val gecko = geckoView ?: return
         if (gecko.parent == null) return
+        // The keyboard overlays the page: moving over it mustn't hover what's underneath (pages can
+        // drop focus from the field being typed into)
+        if (isPointOverKeyboard(screenX, screenY)) return
         val now = SystemClock.uptimeMillis()
         if (now - lastGeckoHoverAt < 33) return
         lastGeckoHoverAt = now
