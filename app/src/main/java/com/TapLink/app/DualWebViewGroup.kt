@@ -460,9 +460,28 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         if (url.startsWith("file:///android_asset/")) return
         val zoom = effectiveWebZoom()
         Log.d("GeckoEngine", "site zoom $zoom (saved $currentWebZoom)")
-        if (zoom != 1f) {
-            webView.evaluateJavascript("document.body && (document.body.style.zoom = '$zoom');", null)
-        }
+        if (zoom != 1f) applyWebZoom(zoom)
+    }
+
+    /**
+     * Sets the page zoom. The WebView path scales the body with CSS zoom; on GeckoView that also
+     * scales players' layout (Plex put subtitles mid-screen, tiny), so there websites in mobile
+     * mode are zoomed like a mobile browser does instead: a wider layout viewport (TapLink's
+     * width=600 divided by the zoom), which Gecko scales to fit.
+     */
+    private fun applyWebZoom(zoom: Float) {
+        val isAppPage = webView.url?.startsWith("file:///android_asset/") == true
+        val script =
+                if (geckoSession != null && !isAppPage && !isDesktopMode()) {
+                    val width = Math.round(600f / zoom)
+                    "(function(){var m=document.querySelector('meta[name=\"viewport\"]');" +
+                            "if(!m){m=document.createElement('meta');m.name='viewport';" +
+                            "(document.head||document.documentElement).appendChild(m);}" +
+                            "m.content='width=$width';if(document.body)document.body.style.zoom='';})();"
+                } else {
+                    "document.body && (document.body.style.zoom = '$zoom');"
+                }
+        webView.evaluateJavascript(script, null)
     }
 
     // GeckoView lays websites out tighter than the WebView did; start them at 90% (the zoom-out
@@ -496,11 +515,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             geckoFullScreenHidden.clear()
         }
         updateScrollBarsVisibility()
-        // The site zoom (body CSS zoom) also scales the fullscreen element's layout, which throws
-        // off players' sizing and subtitle placement. Drop it while fullscreen.
-        val zoom = if (fullScreen) "" else effectiveWebZoom().takeIf { it != 1f }?.toString() ?: ""
+        requestLayout()
+        // Players size fullscreen video and subtitles to the page; show it at 100% while fullscreen
         if (webView.url?.startsWith("file:///android_asset/") != true) {
-            webView.evaluateJavascript("document.body && (document.body.style.zoom = '$zoom');", null)
+            applyWebZoom(if (fullScreen) 1f else effectiveWebZoom())
         }
         if (fullScreen) postDelayed({ logGeckoFullScreenGeometry() }, 800)
     }
@@ -4240,7 +4258,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val horizontalReserve =
                 if (horizontalScrollBar.visibility == View.VISIBLE) scrollBarSizePx else 0
 
-        if (isInScrollMode || isNavBarsHidden) {
+        if (isInScrollMode || isNavBarsHidden || geckoFullScreen) {
             val keyboardLimit =
                     if (isKeyboardVisible) {
                         eyeHeight - keyboardHeight // Shrink to fit above keyboard
@@ -4458,7 +4476,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
 
         // Hide system info bar in scroll mode or when nav bars are hidden, show otherwise
-        if (isInScrollMode || isNavBarsHidden) {
+        if (isInScrollMode || isNavBarsHidden || geckoFullScreen) {
             leftSystemInfoView.visibility = View.GONE
         } else {
             leftSystemInfoView.visibility = View.VISIBLE
@@ -4960,7 +4978,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // FIX: Respect the LayoutParams set by updateScrollBarsVisibility
         val lp = webViewsContainer.layoutParams
 
-        if (isInScrollMode || isNavBarsHidden) {
+        if (isInScrollMode || isNavBarsHidden || geckoFullScreen) {
             val targetWidth = if (lp != null && lp.width > 0) lp.width else 640
             val targetHeight = if (lp != null && lp.height > 0) lp.height else 480
 
@@ -6381,14 +6399,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 .putFloat("webZoomLevel", currentWebZoom)
                 .apply()
 
-        webView.evaluateJavascript(
-                """
-        (function() {
-            document.body.style.zoom = "${effectiveWebZoom()}";
-        })();
-    """,
-                null
-        )
+        applyWebZoom(effectiveWebZoom())
 
         postDelayed(
                 {
@@ -7311,14 +7322,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                             .putFloat("webZoomLevel", currentWebZoom)
                             .apply()
 
-                    webView.evaluateJavascript(
-                            """
-                        (function() {
-                            document.body.style.zoom = "${effectiveWebZoom()}";
-                        })();
-                    """,
-                            null
-                    )
+                    applyWebZoom(effectiveWebZoom())
 
                     postDelayed(
                             {
