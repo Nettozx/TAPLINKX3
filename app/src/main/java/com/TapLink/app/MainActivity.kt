@@ -2300,30 +2300,101 @@ class MainActivity :
                 return@runOnUiThread
             }
 
-            if (groqAudioService == null) {
-                initializeGroqService()
-            }
-
-            if (!groqAudioService!!.hasApiKey()) {
-                showGroqKeyDialog()
-                return@runOnUiThread
-            }
-
-            if (groqAudioService!!.isRecording()) {
-                // Stop listening
-                DebugLog.d("SpeechRecognition", "Stopping Groq recording")
-                groqAudioService?.stopRecording()
-                setVoiceAssistantAudioRoute(false)
-                dualWebViewGroup.showToast("Processing...")
-            } else {
-                // Start listening
-                DebugLog.d("SpeechRecognition", "Starting Groq recording")
-                setVoiceAssistantAudioRoute(true)
-                groqAudioService?.startRecording()
-                dualWebViewGroup.showToast("Listening...")
-            }
+            toggleSystemSpeech()
         }
     }
+
+    // Voice typing with the device's speech recognizer (RayNeo's RecognitionService on the X3
+    // Pro), replacing the Groq service that needed an API key
+    private var speechRecognizer: SpeechRecognizer? = null
+
+    private fun toggleSystemSpeech() {
+        if (isListeningForSpeech) {
+            speechRecognizer?.stopListening()
+            dualWebViewGroup.showToast("Processing...")
+            return
+        }
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            dualWebViewGroup.showToast("Voice typing isn't available on this device")
+            return
+        }
+        val recognizer =
+                speechRecognizer
+                        ?: SpeechRecognizer.createSpeechRecognizer(this).also {
+                            it.setRecognitionListener(speechListener)
+                            speechRecognizer = it
+                        }
+        val intent =
+                Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                }
+        setVoiceAssistantAudioRoute(true)
+        isListeningForSpeech = true
+        keyboardView?.setMicActive(true)
+        try {
+            recognizer.startListening(intent)
+            dualWebViewGroup.showToast("Listening...")
+        } catch (e: Exception) {
+            DebugLog.e("SpeechRecognition", "startListening failed", e)
+            endSpeech()
+            dualWebViewGroup.showToast("Voice typing failed to start")
+        }
+    }
+
+    private fun endSpeech() {
+        isListeningForSpeech = false
+        setVoiceAssistantAudioRoute(false)
+        keyboardView?.setMicActive(false)
+    }
+
+    private val speechListener =
+            object : RecognitionListener {
+                override fun onResults(results: Bundle?) {
+                    val text =
+                            results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+                    runOnUiThread {
+                        endSpeech()
+                        if (text.isNullOrBlank()) {
+                            dualWebViewGroup.showToast("Didn't catch that")
+                        } else {
+                            handleVoiceResult(text)
+                        }
+                    }
+                }
+
+                override fun onError(error: Int) {
+                    DebugLog.e("SpeechRecognition", "recognizer error $error")
+                    runOnUiThread {
+                        endSpeech()
+                        val message =
+                                when (error) {
+                                    SpeechRecognizer.ERROR_NO_MATCH,
+                                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Didn't catch that"
+                                    SpeechRecognizer.ERROR_NETWORK,
+                                    SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Voice typing needs a connection"
+                                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission needed"
+                                    else -> "Voice typing error ($error)"
+                                }
+                        dualWebViewGroup.showToast(message)
+                    }
+                }
+
+                override fun onEndOfSpeech() {}
+
+                override fun onReadyForSpeech(params: Bundle?) {}
+
+                override fun onBeginningOfSpeech() {}
+
+                override fun onRmsChanged(rmsdB: Float) {}
+
+                override fun onBufferReceived(buffer: ByteArray?) {}
+
+                override fun onPartialResults(partialResults: Bundle?) {}
+
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+            }
 
     fun showGroqKeyDialog() {
         if (groqAudioService == null) {
@@ -5063,6 +5134,7 @@ class MainActivity :
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
         when (requestCode) {
+            GECKO_PERMISSIONS_REQUEST_CODE -> dualWebViewGroup.onGeckoPermissionsResult(grantResults)
             PERMISSIONS_REQUEST_CODE -> {
                 pendingPermissionRequest?.let { request ->
                     val grantedResources = mutableListOf<String>()
@@ -6773,6 +6845,8 @@ class MainActivity :
 
     override fun onDestroy() {
         super.onDestroy()
+        speechRecognizer?.destroy()
+        speechRecognizer = null
         if (::controllerBluetoothClient.isInitialized) {
             controllerBluetoothClient.stop()
         }

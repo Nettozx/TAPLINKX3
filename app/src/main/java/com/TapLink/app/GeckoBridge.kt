@@ -108,7 +108,6 @@ class GeckoBridge : WebExtension.MessageDelegate, WebExtension.PortDelegate {
     private val loggedCalls = HashSet<String>()
 
     private fun invoke(iface: String, methodName: String, args: JSONArray?) {
-        if (loggedCalls.add("$iface.$methodName")) Log.d(TAG, "page calls $iface.$methodName $args")
         val obj = interfaces[iface] ?: return
         val argCount = args?.length() ?: 0
         val method =

@@ -61,6 +61,7 @@ import org.json.JSONObject
 import java.util.WeakHashMap
 
 private const val EXTENSIONS_PAGE_URL = "file:///android_asset/extensions.html"
+const val GECKO_PERMISSIONS_REQUEST_CODE = 4711
 
 @SuppressLint("ClickableViewAccessibility")
 class DualWebViewGroup
@@ -204,13 +205,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     } finally {
                         forwardingToGecko = false
                     }
-            if (event.actionMasked != MotionEvent.ACTION_MOVE) {
-                Log.d(
-                        "GeckoEngine",
-                        "touch action=${event.actionMasked} x=${event.x} y=${event.y} src=${event.source} " +
-                                "meta=${event.metaState} handled=$handled"
-                )
-            }
             if (forwarded !== event) forwarded.recycle()
             return handled
         }
@@ -289,6 +283,109 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     private val geckoBridge: GeckoBridge? = if (GeckoEngine.isEnabled(context)) GeckoBridge() else null
 
+    // Site permissions: location, camera/microphone and notifications ask with TapLink's dialog;
+    // autoplay and storage are allowed as browsers do. (The WebView path granted everything.)
+    private var pendingAndroidPermissions: GeckoSession.PermissionDelegate.Callback? = null
+
+    private val geckoPermissionDelegate =
+            object : GeckoSession.PermissionDelegate {
+                override fun onContentPermissionRequest(
+                        session: GeckoSession,
+                        perm: GeckoSession.PermissionDelegate.ContentPermission
+                ): GeckoResult<Int>? {
+                    val allow = GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
+                    val deny = GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
+                    val what =
+                            when (perm.permission) {
+                                GeckoSession.PermissionDelegate.PERMISSION_GEOLOCATION -> "use your location"
+                                GeckoSession.PermissionDelegate.PERMISSION_DESKTOP_NOTIFICATION -> "show notifications"
+                                GeckoSession.PermissionDelegate.PERMISSION_XR -> "use VR/AR"
+                                GeckoSession.PermissionDelegate.PERMISSION_LOCAL_DEVICE_ACCESS,
+                                GeckoSession.PermissionDelegate.PERMISSION_LOCAL_NETWORK_ACCESS ->
+                                        "access devices on your network"
+                                else -> return GeckoResult.fromValue(allow) // autoplay, storage, DRM
+                            }
+                    val result = GeckoResult<Int>()
+                    post {
+                        showConfirmDialog(
+                                "${siteName(perm.uri)} wants to $what. Allow?",
+                                { result.complete(allow) },
+                                { result.complete(deny) }
+                        )
+                    }
+                    return result
+                }
+
+                override fun onMediaPermissionRequest(
+                        session: GeckoSession,
+                        uri: String,
+                        video: Array<out GeckoSession.PermissionDelegate.MediaSource>?,
+                        audio: Array<out GeckoSession.PermissionDelegate.MediaSource>?,
+                        callback: GeckoSession.PermissionDelegate.MediaCallback
+                ) {
+                    val camera = video?.firstOrNull()
+                    val microphone = audio?.firstOrNull()
+                    val what =
+                            when {
+                                camera != null && microphone != null -> "use your camera and microphone"
+                                camera != null -> "use your camera"
+                                microphone != null -> "use your microphone"
+                                else -> {
+                                    callback.reject()
+                                    return
+                                }
+                            }
+                    post {
+                        showConfirmDialog(
+                                "${siteName(uri)} wants to $what. Allow?",
+                                { callback.grant(camera, microphone) },
+                                { callback.reject() }
+                        )
+                    }
+                }
+
+                // Gecko needs the app's own Android permission (camera, mic, location) first
+                override fun onAndroidPermissionsRequest(
+                        session: GeckoSession,
+                        permissions: Array<out String>?,
+                        callback: GeckoSession.PermissionDelegate.Callback
+                ) {
+                    val activity = context as? Activity
+                    val missing =
+                            permissions.orEmpty().filter {
+                                androidx.core.content.ContextCompat.checkSelfPermission(context, it) !=
+                                        android.content.pm.PackageManager.PERMISSION_GRANTED
+                            }
+                    if (missing.isEmpty()) {
+                        callback.grant()
+                    } else if (activity == null) {
+                        callback.reject()
+                    } else {
+                        pendingAndroidPermissions?.reject()
+                        pendingAndroidPermissions = callback
+                        activity.requestPermissions(missing.toTypedArray(), GECKO_PERMISSIONS_REQUEST_CODE)
+                    }
+                }
+            }
+
+    /** MainActivity forwards the result of [GECKO_PERMISSIONS_REQUEST_CODE] requests here. */
+    fun onGeckoPermissionsResult(grantResults: IntArray) {
+        val callback = pendingAndroidPermissions ?: return
+        pendingAndroidPermissions = null
+        if (grantResults.isNotEmpty() && grantResults.all { it == android.content.pm.PackageManager.PERMISSION_GRANTED }) {
+            callback.grant()
+        } else {
+            callback.reject()
+        }
+    }
+
+    private fun siteName(uri: String): String =
+            try {
+                android.net.Uri.parse(uri).host?.removePrefix("www.") ?: "This site"
+            } catch (e: Exception) {
+                "This site"
+            }
+
     private val geckoSession: GeckoSession? =
             if (GeckoEngine.isEnabled(context)) {
                 GeckoSession().apply {
@@ -356,6 +453,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     // only sees the top document, e.g. not Plex's sign-in frame). Show the app's
                     // keyboard instead of the system one.
                     textInput.setDelegate(geckoTextInputDelegate)
+                    permissionDelegate = geckoPermissionDelegate
                     open(GeckoEngine.runtime(context))
                     val bridge = geckoBridge
                     if (bridge != null) {
@@ -595,7 +693,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // zoom on load, so applying it here shrank the dashboard)
         if (url.startsWith("file:///android_asset/")) return
         val zoom = effectiveWebZoom()
-        Log.d("GeckoEngine", "site zoom $zoom (saved $currentWebZoom)")
         if (zoom != 1f) applyWebZoom(zoom)
     }
 
@@ -673,25 +770,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 postDelayed({ if (geckoFullScreen == fullScreen) applyWebZoom(effectiveWebZoom(), nudge = true) }, delay)
             }
         }
-        if (fullScreen) postDelayed({ logGeckoFullScreenGeometry() }, 800)
         // Let the cursor start (or stop) its fullscreen idle hide
         listener?.onCursorPositionChanged(lastCursorX, lastCursorY, pendingCursorVisible)
-    }
-
-    private fun logGeckoFullScreenGeometry() {
-        val gecko = geckoView ?: return
-        gecko.getLocationOnScreen(geckoHoverLocation)
-        Log.d(
-                "GeckoEngine",
-                "fullscreen view ${gecko.width}x${gecko.height} at ${geckoHoverLocation[0]},${geckoHoverLocation[1]} " +
-                        "container ${webViewsContainer.width}x${webViewsContainer.height} uiScale=$uiScale " +
-                        "trans=${leftEyeUIContainer.translationX},${leftEyeUIContainer.translationY}"
-        )
-        webView.evaluateJavascript(
-                "(function(){var f=document.fullscreenElement;var r=f&&f.getBoundingClientRect();" +
-                        "return innerWidth+'x'+innerHeight+' screen '+screen.width+'x'+screen.height+' dpr '+devicePixelRatio+" +
-                        "' fs '+(f?f.tagName+' '+Math.round(r.left)+','+Math.round(r.top)+' '+Math.round(r.width)+'x'+Math.round(r.height):'none');})()"
-        ) { result -> Log.d("GeckoEngine", "fullscreen page $result") }
     }
 
     /** Back: leaves page fullscreen on GeckoView. False when not in it. */

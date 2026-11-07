@@ -72,7 +72,6 @@
       }
       const encoded = result === undefined ? undefined : stringify(result);
       if (encoded !== undefined) json = encoded;
-      if (json !== "null") log("script " + id + " (" + mode + ") -> " + json.slice(0, 60));
     } catch (e) {
       log("script " + id + " failed: " + e + " :: " + String(code).slice(0, 120));
     }
@@ -174,7 +173,6 @@
       port = null;
       retry();
     });
-    log("connected " + location.href.slice(0, 120));
   }
 
   // The app registers its side shortly after startup; early pages retry until it's there.
