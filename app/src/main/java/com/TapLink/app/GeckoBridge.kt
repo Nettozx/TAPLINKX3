@@ -83,7 +83,13 @@ class GeckoBridge : WebExtension.MessageDelegate, WebExtension.PortDelegate {
         when (json.optString("type")) {
             "log" -> Log.d(TAG, "page: ${json.optString("text")}")
             "result" -> callbacks.remove(json.optInt("id"))?.onReceiveValue(json.optString("value", "null"))
-            "call" -> invoke(json.optString("iface"), json.optString("method"), json.optJSONArray("args"))
+            // Args come as a JSON string: GeckoView's message conversion rejects mixed-type arrays
+            // (e.g. ["id", false]) and drops the whole message
+            "call" -> {
+                val args = json.optString("argsJson", "").takeIf { it.isNotEmpty() }?.let { JSONArray(it) }
+                        ?: json.optJSONArray("args")
+                invoke(json.optString("iface"), json.optString("method"), args)
+            }
         }
     }
 
