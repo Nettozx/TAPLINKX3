@@ -655,86 +655,98 @@
     /* Apps list */
     const storageKey = 'dashboardLinksV1';
     const defaultApps = {
-      glassapps: { name: 'Glass Apps', url: 'file:///android_asset/glassapps_store.html' },
+      // glassapps: { name: 'Glass Apps', url: 'file:///android_asset/glassapps_store.html' },
       // Social & Messaging
-      gmessages: { name: 'Google Messages', url: 'https://messages.google.com/web/welcome' },
-      discord: { name: 'Discord', url: 'https://discord.com/app' },
-      whatsapp: { name: 'WhatsApp', url: 'https://web.whatsapp.com' },
-      instagram: { name: 'Instagram', url: 'https://www.instagram.com' },
+      // gmessages: { name: 'Google Messages', url: 'https://messages.google.com/web/welcome' },
+      // discord: { name: 'Discord', url: 'https://discord.com/app' },
+      // whatsapp: { name: 'WhatsApp', url: 'https://web.whatsapp.com' },
+      // instagram: { name: 'Instagram', url: 'https://www.instagram.com' },
       reddit: { name: 'Reddit', url: 'https://www.reddit.com' },
-      telegram: { name: 'Telegram', url: 'https://web.telegram.org' },
-      tiktok: { name: 'TikTok', url: 'https://www.tiktok.com' },
+      // telegram: { name: 'Telegram', url: 'https://web.telegram.org' },
+      // tiktok: { name: 'TikTok', url: 'https://www.tiktok.com' },
 
       // Media & Search
       youtube: { name: 'YouTube', url: 'https://www.youtube.com' },
-      informaltech: { name: 'Informal Tech', url: 'https://www.youtube.com/@informal-tech' },
+      // informaltech: { name: 'Informal Tech', url: 'https://www.youtube.com/@informal-tech' },
       gmaps: { name: 'Google Maps', url: 'https://www.google.com/maps' },
-      minijuegos: { name: 'Minijuegos', url: 'https://www.minijuegos.com' },
+      // minijuegos: { name: 'Minijuegos', url: 'https://www.minijuegos.com' },
 
       // Music Streaming
-      ytmusic: { name: 'YouTube Music', url: 'https://music.youtube.com' },
-      spotify: { name: 'Spotify', url: 'https://open.spotify.com' },
-      applemusic: { name: 'Apple Music', url: 'https://music.apple.com' },
-      tidal: { name: 'Tidal', url: 'https://listen.tidal.com' },
-      deezer: { name: 'Deezer', url: 'https://www.deezer.com' },
-      audiomack: { name: 'Audiomack', url: 'https://audiomack.com' },
-      soundcloud: { name: 'SoundCloud', url: 'https://soundcloud.com' },
+      // ytmusic: { name: 'YouTube Music', url: 'https://music.youtube.com' },
+      // spotify: { name: 'Spotify', url: 'https://open.spotify.com' },
+      // applemusic: { name: 'Apple Music', url: 'https://music.apple.com' },
+      // tidal: { name: 'Tidal', url: 'https://listen.tidal.com' },
+      // deezer: { name: 'Deezer', url: 'https://www.deezer.com' },
+      // audiomack: { name: 'Audiomack', url: 'https://audiomack.com' },
+      // soundcloud: { name: 'SoundCloud', url: 'https://soundcloud.com' },
 
       // Creativity / Multimedia
-      photopea: { name: 'Photopea (Photo)', url: 'https://www.photopea.com' },
-      clipchamp: { name: 'Clipchamp (Video)', url: 'https://clipchamp.com/en/video-editor/' },
-      bandlab: { name: 'BandLab (DAW)', url: 'https://www.bandlab.com' },
-      wireframe: { name: 'Wireframe.cc', url: 'https://wireframe.cc' },
-      kleki: { name: 'Kleki', url: 'https://kleki.com' },
+      // photopea: { name: 'Photopea (Photo)', url: 'https://www.photopea.com' },
+      // clipchamp: { name: 'Clipchamp (Video)', url: 'https://clipchamp.com/en/video-editor/' },
+      // bandlab: { name: 'BandLab (DAW)', url: 'https://www.bandlab.com' },
+      // wireframe: { name: 'Wireframe.cc', url: 'https://wireframe.cc' },
+      // kleki: { name: 'Kleki', url: 'https://kleki.com' },
 
       // Productivity / Docs
-      todoist: { name: 'Todoist', url: 'https://www.todoist.com' },
-      stackedit: { name: 'StackEdit (Text)', url: 'https://stackedit.io/app' },
-      sejda: { name: 'Sejda PDF Editor', url: 'https://www.sejda.com/pdf-editor' },
+      // todoist: { name: 'Todoist', url: 'https://www.todoist.com' },
+      // stackedit: { name: 'StackEdit (Text)', url: 'https://stackedit.io/app' },
+      // sejda: { name: 'Sejda PDF Editor', url: 'https://www.sejda.com/pdf-editor' },
 
       // LLMs / Chatbots
       gemini: { name: 'Gemini', url: 'https://gemini.google.com' },
-      googleaistudio: { name: 'Google AI Studio', url: 'https://aistudio.google.com' },
-      jules: { name: 'Jules (Code)', url: 'https://jules.google.com' },
-      perplexity: { name: 'Perplexity', url: 'https://www.perplexity.ai' },
+      // googleaistudio: { name: 'Google AI Studio', url: 'https://aistudio.google.com' },
+      // jules: { name: 'Jules (Code)', url: 'https://jules.google.com' },
+      // perplexity: { name: 'Perplexity', url: 'https://www.perplexity.ai' },
       chatgpt: { name: 'ChatGPT', url: 'https://chatgpt.com' },
       claude: { name: 'Claude', url: 'https://claude.ai' },
-      deepseek: { name: 'DeepSeek', url: 'https://chat.deepseek.com' },
-      grok: { name: 'Grok', url: 'https://grok.com' },
+      // deepseek: { name: 'DeepSeek', url: 'https://chat.deepseek.com' },
+      // grok: { name: 'Grok', url: 'https://grok.com' },
 
       // Utilities / Reference
-      wikipedia: { name: 'Wikipedia', url: 'https://www.wikipedia.org' },
+      // wikipedia: { name: 'Wikipedia', url: 'https://www.wikipedia.org' },
       translate: { name: 'Google Translate', url: 'https://translate.google.com' },
-      wolfram: { name: 'WolframAlpha', url: 'https://www.wolframalpha.com' },
+      // wolfram: { name: 'WolframAlpha', url: 'https://www.wolframalpha.com' },
 
       // AI Music Generation
-      suno: { name: 'Suno (AI Music)', url: 'https://suno.com' },
-      udio: { name: 'Udio (AI Music)', url: 'https://www.udio.com' },
-      stableaudio: { name: 'Stable Audio', url: 'https://stableaudio.com' },
+      // suno: { name: 'Suno (AI Music)', url: 'https://suno.com' },
+      // udio: { name: 'Udio (AI Music)', url: 'https://www.udio.com' },
+      // stableaudio: { name: 'Stable Audio', url: 'https://stableaudio.com' },
 
       // AI Video Generation
-      runway: { name: 'Runway (AI Video)', url: 'https://runwayml.com' },
-      pika: { name: 'Pika (AI Video)', url: 'https://pika.art' },
-      luma: { name: 'Luma Dream Machine', url: 'https://lumalabs.ai/dream-machine' },
+      // runway: { name: 'Runway (AI Video)', url: 'https://runwayml.com' },
+      // pika: { name: 'Pika (AI Video)', url: 'https://pika.art' },
+      // luma: { name: 'Luma Dream Machine', url: 'https://lumalabs.ai/dream-machine' },
 
       // AI Voice / Cloning
-      elevenlabs: { name: 'ElevenLabs (Voice)', url: 'https://elevenlabs.io' },
-      playht: { name: 'PlayHT (Voice)', url: 'https://play.ht' }
+      // elevenlabs: { name: 'ElevenLabs (Voice)', url: 'https://elevenlabs.io' },
+      // playht: { name: 'PlayHT (Voice)', url: 'https://play.ht' }
+
+      // My links (Custom)
+      slickdeals: { name: 'Slickdeals', url: 'https://slickdeals.net' },
+      gvoice: { name: 'Google Voice', url: 'https://voice.google.com' },
     };
 
     const defaultGroups = [
-      { title: 'Navigation / Entertainment', cls: 'sec-nav', keys: ['glassapps', 'youtube', 'informaltech', 'gmaps', 'minijuegos', 'tiktok'] },
-      { title: 'AI / Chatbots', cls: 'sec-llm', keys: ['gemini', 'googleaistudio', 'jules', 'perplexity', 'chatgpt', 'claude', 'deepseek', 'grok'] },
-      { title: 'Social / Communication', cls: 'sec-social', keys: ['gmessages', 'discord', 'whatsapp', 'instagram', 'reddit', 'telegram'] },
-      { title: 'Music / Streaming', cls: 'sec-music', keys: ['ytmusic', 'spotify', 'applemusic', 'tidal', 'deezer', 'audiomack', 'soundcloud'] },
-      { title: 'Creativity / Multimedia', cls: 'sec-creative', keys: ['photopea', 'clipchamp', 'bandlab', 'wireframe', 'kleki'] },
-      { title: 'Productivity / Documents', cls: 'sec-prod', keys: ['todoist', 'stackedit', 'sejda'] },
-      { title: 'Utilities / Reference', cls: 'sec-util', keys: ['wikipedia', 'translate', 'wolfram'] },
-      { title: 'AI Music', cls: 'sec-aimusic', keys: ['suno', 'udio', 'stableaudio'] },
-      { title: 'AI Video', cls: 'sec-aivideo', keys: ['runway', 'pika', 'luma'] },
-      { title: 'AI Voice', cls: 'sec-voice', keys: ['elevenlabs', 'playht'] },
-      { title: 'Custom Links', cls: 'sec-custom', keys: [] }
+      { title: 'Navigation / Entertainment', cls: 'sec-nav', keys: ['youtube', 'gmaps'] },
+      { title: 'AI / Chatbots', cls: 'sec-llm', keys: ['gemini', 'chatgpt', 'claude'] },
+      { title: 'Social / Communication', cls: 'sec-social', keys: ['reddit'] },
+      { title: 'Utilities / Reference', cls: 'sec-util', keys: ['translate'] },
+      { title: 'Custom Links', cls: 'sec-custom', keys: ['slickdeals', 'gvoice'] }
     ];
+
+    // Saved dashboards keep their own copy of the defaults, so changes to the list above are
+    // applied to them once, by version: retired apps are removed (from the launcher and its
+    // sections) and new defaults added. Links the user created are kept.
+    const defaultsVersion = 2;
+    const retiredDefaultApps = [
+      'glassapps', 'gmessages', 'discord', 'whatsapp', 'instagram', 'telegram', 'tiktok',
+      'informaltech', 'minijuegos', 'ytmusic', 'spotify', 'applemusic', 'tidal', 'deezer',
+      'audiomack', 'soundcloud', 'photopea', 'clipchamp', 'bandlab', 'wireframe', 'kleki',
+      'todoist', 'stackedit', 'sejda', 'googleaistudio', 'jules', 'perplexity', 'deepseek',
+      'grok', 'wikipedia', 'wolfram', 'suno', 'udio', 'stableaudio', 'runway', 'pika', 'luma',
+      'elevenlabs', 'playht'
+    ];
+    const addedDefaultApps = ['slickdeals', 'gvoice'];
 
     function normalizeTitle(value) {
       if (!value) return '';
@@ -819,18 +831,48 @@
       });
       const fallback = {
         apps: { ...defaultApps },
-        groups: fallbackGroups
+        groups: fallbackGroups,
+        defaultsVersion
       };
       try {
         const saved = JSON.parse(localStorage.getItem(storageKey));
         if (saved && saved.apps) {
           return {
             apps: saved.apps,
-            groups: mergeGroups(saved.groups)
+            groups: mergeGroups(saved.groups),
+            defaultsVersion: saved.defaultsVersion || 1
           };
         }
       } catch (e) { }
       return fallback;
+    }
+
+    function migrateDefaults(dashboardState) {
+      if ((dashboardState.defaultsVersion || 1) >= defaultsVersion) return false;
+      for (const key of retiredDefaultApps) delete dashboardState.apps[key];
+      for (const group of dashboardState.groups) {
+        if (Array.isArray(group.keys)) group.keys = group.keys.filter(key => !retiredDefaultApps.includes(key));
+      }
+      for (const key of addedDefaultApps) {
+        if (dashboardState.apps[key] || !defaultApps[key]) continue;
+        dashboardState.apps[key] = { ...defaultApps[key] };
+        const home = defaultGroups.find(group => group.keys.includes(key));
+        if (!home) continue;
+        let target = dashboardState.groups.find(group => normalizeTitle(group.title) === normalizeTitle(home.title));
+        if (!target) {
+          target = { title: normalizeTitle(home.title), cls: home.cls, keys: [] };
+          dashboardState.groups.push(target);
+        }
+        if (!Array.isArray(target.keys)) target.keys = [];
+        if (!target.keys.includes(key)) target.keys.push(key);
+      }
+      // Sections left empty by the retired apps (not the user's own, or Custom Links)
+      const keep = new Set(defaultGroups.map(group => normalizeTitle(group.title)));
+      dashboardState.groups = dashboardState.groups.filter(
+        group => keep.has(normalizeTitle(group.title)) || (Array.isArray(group.keys) && group.keys.length)
+      );
+      dashboardState.defaultsVersion = defaultsVersion;
+      return true;
     }
 
     function persistState() {
@@ -838,9 +880,10 @@
     }
 
     let state = loadState();
+    const migratedDefaults = migrateDefaults(state);
     const migratedReddit = ensureRedditMigration(state);
     const repairedBuiltIns = ensureBuiltInAppUrls(state);
-    if (sanitizeGroups(state.groups) || migratedReddit || repairedBuiltIns) {
+    if (sanitizeGroups(state.groups) || migratedDefaults || migratedReddit || repairedBuiltIns) {
       persistState();
     }
 
