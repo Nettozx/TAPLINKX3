@@ -750,8 +750,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val session = geckoView?.session ?: geckoSession ?: return false
         val connection = geckoInputConnection(session) ?: return false
         session.textInput.getHandler(handler ?: android.os.Handler(android.os.Looper.getMainLooper())).post {
-            val ok = connection.commitText(text, 1)
-            Log.d("GeckoEngine", "typing: commit ${text.length} chars -> $ok") // TEMP debug
+            connection.commitText(text, 1)
         }
         return true
     }

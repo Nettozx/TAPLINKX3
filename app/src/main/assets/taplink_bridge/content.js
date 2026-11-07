@@ -287,24 +287,6 @@
     if (connectAttempts++ < 40) setTimeout(connect, 250);
   }
 
-  // TEMP debug (Google Maps typing): where focus goes and whether typed text arrives
-  if (/(^|\.)google\./.test(location.host)) {
-    const describe = (el) => {
-      if (!el || !el.tagName) return String(el);
-      let text = el.tagName.toLowerCase();
-      if (el.id) text += "#" + el.id;
-      if (el.getAttribute && el.getAttribute("aria-label")) text += "[" + el.getAttribute("aria-label").slice(0, 30) + "]";
-      if (el.isContentEditable) text += "(editable)";
-      return text;
-    };
-    for (const type of ["focusin", "focusout"]) {
-      window.addEventListener(type, (e) => log("maps " + type + " " + describe(e.target) + " active=" + describe(document.activeElement)), true);
-    }
-    for (const type of ["beforeinput", "input", "keydown", "compositionstart"]) {
-      window.addEventListener(type, (e) => log("maps " + type + " on " + describe(e.target) + (e.data ? " data" : "")), true);
-    }
-  }
-
   try {
     installGeolocation();
   } catch (e) {

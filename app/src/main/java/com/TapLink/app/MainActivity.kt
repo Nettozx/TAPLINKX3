@@ -3107,6 +3107,11 @@ class MainActivity :
     }
 
     private fun checkAndShowKeyboard(adjustedX: Int, adjustedY: Int) {
+        // GeckoView reports text field focus itself (TextInputDelegate.showSoftInput opens the
+        // keyboard). This check focuses and then blurs the element at the tap position to test it,
+        // and with Gecko's zoomed coordinates it hit a neighbouring field, knocking focus off the
+        // one tapped (Google Maps' direction boxes then dropped every keystroke).
+        if (dualWebViewGroup.isGeckoEngine()) return
         webView.evaluateJavascript(
                 """
         (function() {
