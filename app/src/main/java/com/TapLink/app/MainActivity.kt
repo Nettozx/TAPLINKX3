@@ -3011,7 +3011,7 @@ class MainActivity :
                             .apply { source = InputDevice.SOURCE_TOUCHSCREEN }
             webView.dispatchTouchEvent(motionEventDown)
 
-            webView.evaluateJavascript(
+            val tapScript =
                     """
     (function() {
         var element = document.elementFromPoint($adjustedX, $adjustedY);
@@ -3042,7 +3042,10 @@ class MainActivity :
         return null;
     })();
 """
-            ) { _ ->
+            var tapCompleted = false
+            val completeTap = ValueCallback<String> { _ ->
+                if (tapCompleted) return@ValueCallback
+                tapCompleted = true
                 // Complete the touch sequence regardless of whether we found a special link
                 Handler(Looper.getMainLooper())
                         .postDelayed(
@@ -3083,6 +3086,10 @@ class MainActivity :
                                 16
                         )
             }
+            webView.evaluateJavascript(tapScript, completeTap)
+            // GeckoView: don't hold the touch until the script answers. Pages busy playing video
+            // answered late, turning taps into 1 s long presses (Plex then toggled play/pause).
+            if (dualWebViewGroup.isGeckoEngine()) completeTap.onReceiveValue(null)
         } catch (e: Exception) {
             DebugLog.e("ClickDebug", "Error in dispatchTouchEventAtCursor: ${e.message}")
             e.printStackTrace()

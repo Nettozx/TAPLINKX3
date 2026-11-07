@@ -516,10 +516,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
         updateScrollBarsVisibility()
         requestLayout()
-        // Players size fullscreen video and subtitles to the page; show it at 100% while fullscreen
-        if (webView.url?.startsWith("file:///android_asset/") != true) {
-            applyWebZoom(if (fullScreen) 1f else effectiveWebZoom())
-        }
         if (fullScreen) postDelayed({ logGeckoFullScreenGeometry() }, 800)
     }
 
@@ -6186,12 +6182,14 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     fun isNavBarVisible(): Boolean {
         // Check both visibility AND scroll mode - in scroll mode, bars are hidden even during fade
-        // animation
-        return !isInScrollMode && leftNavigationBar.visibility == View.VISIBLE
+        // animation. In GeckoView page fullscreen they're hidden but may be faded back to VISIBLE.
+        return !isInScrollMode && !geckoFullScreen && leftNavigationBar.visibility == View.VISIBLE
     }
 
+    fun isGeckoEngine(): Boolean = geckoSession != null
+
     fun isToggleBarVisible(): Boolean {
-        return leftToggleBar.visibility == View.VISIBLE
+        return !geckoFullScreen && leftToggleBar.visibility == View.VISIBLE
     }
 
     fun isPointInToggleBar(screenX: Float, screenY: Float): Boolean {
