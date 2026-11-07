@@ -3651,12 +3651,41 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     fun maskScreen() {
         isScreenMasked = true
+        placeUnmaskButtonOverMaskToggle()
         maskOverlay.visibility = View.VISIBLE
         maskOverlay.bringToFront()
         // Hide both cursor views
         leftToggleBar.findViewById<FontIconView>(R.id.btnMask)?.setText(R.string.fa_eye_slash)
         keepScreenOn = true
         updateRefreshRate()
+    }
+
+    // The show-browser button sits exactly over the sidebar's eye button, so the eye works as a
+    // toggle in one place; without the sidebar on screen it stays in the bottom-right corner.
+    private fun placeUnmaskButtonOverMaskToggle() {
+        val params = btnMaskUnmask.layoutParams as? FrameLayout.LayoutParams ?: return
+        val toggle = leftToggleBar.findViewById<View>(R.id.btnMask)
+        if (toggle == null || !toggle.isShown || toggle.width == 0) {
+            params.width = 40
+            params.height = 40
+            params.gravity = Gravity.BOTTOM or Gravity.END
+            params.leftMargin = 0
+            params.topMargin = 0
+            params.rightMargin = 8
+            params.bottomMargin = 8
+        } else {
+            val scale = if (uiScale <= 0f) 1f else uiScale
+            toggle.getLocationOnScreen(reusableLocation)
+            maskOverlay.getLocationOnScreen(reusableLocation2)
+            params.width = toggle.width
+            params.height = toggle.height
+            params.gravity = Gravity.TOP or Gravity.START
+            params.leftMargin = Math.round((reusableLocation[0] - reusableLocation2[0]) / scale)
+            params.topMargin = Math.round((reusableLocation[1] - reusableLocation2[1]) / scale)
+            params.rightMargin = 0
+            params.bottomMargin = 0
+        }
+        btnMaskUnmask.layoutParams = params
     }
 
     fun unmaskScreen() {
