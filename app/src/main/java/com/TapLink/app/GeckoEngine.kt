@@ -63,6 +63,11 @@ object GeckoEngine {
                                             // Match the WebView's textZoom = 80 (MainActivity)
                                             .automaticFontSizeAdjustment(false)
                                             .fontSizeFactor(0.8f)
+                                            // One eye; the panel is 1280x480 for both, and page
+                                            // fullscreen otherwise sizes to both eyes. App pages use
+                                            // width=640 viewports, which this would shrink as
+                                            // device-width.
+                                            .screenSizeOverride(640, 480)
                                             .build()
                             )
                             .also {
