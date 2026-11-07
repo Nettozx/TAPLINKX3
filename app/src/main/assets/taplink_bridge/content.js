@@ -87,6 +87,8 @@
   // Chrome sends a tap's click to the element the touch started on (or one containing it). Gecko
   // hit-tests again after touchend, so a button that closes an overlay on pointerup lets the click
   // land on whatever was behind it. Drop those mouse/click events, like Chrome would.
+  const CONTROL_SELECTOR = "button, a, label, summary, [role=button], [role=link], [role=menuitem], [role=tab], [onclick]";
+
   function guardClickThrough() {
     let startTarget = null;
     let endTime = 0;
@@ -101,6 +103,10 @@
       const target = e.target;
       if (!target || !startTarget.isConnected) return;
       if (target === startTarget || startTarget.contains(target) || target.contains(startTarget)) return;
+      // Same control: a button that swaps its icon on press (Plex's play/pause) gets the click on
+      // the new icon. Dropping that click left Plex's player toggling play/pause by itself.
+      const control = startTarget.closest && startTarget.closest(CONTROL_SELECTOR);
+      if (control && control.contains(target)) return;
       e.preventDefault();
       e.stopImmediatePropagation();
       if (e.type === "click") startTarget = null;

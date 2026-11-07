@@ -525,7 +525,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
         updateScrollBarsVisibility()
         requestLayout()
-        if (webView.url?.startsWith("file:///android_asset/") != true) applyWebZoom(effectiveWebZoom())
+        if (webView.url?.startsWith("file:///android_asset/") != true) {
+            applyWebZoom(effectiveWebZoom())
+            // Gecko's fullscreen transition can override a viewport change made at its start
+            postDelayed({ if (geckoFullScreen == fullScreen) applyWebZoom(effectiveWebZoom()) }, 700)
+        }
         if (fullScreen) postDelayed({ logGeckoFullScreenGeometry() }, 800)
     }
 
