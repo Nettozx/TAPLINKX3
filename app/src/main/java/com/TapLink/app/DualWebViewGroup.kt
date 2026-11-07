@@ -129,6 +129,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             if (url.startsWith("javascript:")) {
                 geckoBridge?.evaluate(url.removePrefix("javascript:"), null)
             } else {
+                // Navigating (the Dashboard button, a link) shows the page again
+                closeExtensionPopup()
                 session.loadUri(GeckoEngine.toGeckoUri(url))
             }
             return true
@@ -465,6 +467,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         gecko.releaseSession()
         gecko.setSession(session)
         extensionPopup = session
+        updateScrollBarsVisibility()
         Log.d("GeckoEngine", "showing add-on popup")
     }
 
@@ -479,6 +482,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             gecko.setSession(page)
         }
         popup.close()
+        updateScrollBarsVisibility()
         return true
     }
 
@@ -1445,7 +1449,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val baseBottomMargin = if (keyboardVisible) 0 else rawBottomMargin
 
         // If anchored (or in GeckoView page fullscreen), scrollbars are always hidden
-        if (isAnchored || geckoFullScreen) {
+        // The scrollbar scrolls the page through the bridge, which add-on popups don't have
+        if (isAnchored || geckoFullScreen || extensionPopup != null) {
             lastHorzScrollableAt = 0L
             lastVertScrollableAt = 0L
             horizontalScrollBar.visibility = View.GONE

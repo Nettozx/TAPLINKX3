@@ -41,6 +41,7 @@
       const pageObject = cloneInto({}, pageWindow);
       for (const method of defs[name]) {
         const call = (...args) => {
+          if (name === "TapLinkExtensions") log("call " + method + " " + JSON.stringify(args.map(toPlainArg)));
           send({ type: "call", iface: name, method: method, args: args.map(toPlainArg) });
         };
         sandboxObject[method] = call;
@@ -179,6 +180,15 @@
   // The app registers its side shortly after startup; early pages retry until it's there.
   function retry() {
     if (connectAttempts++ < 40) setTimeout(connect, 250);
+  }
+
+  // Debug: which Extensions page button a tap lands on (page console output isn't logged)
+  if (location.pathname.endsWith("/extensions.html")) {
+    window.addEventListener("click", (e) => {
+      const target = e.target;
+      const control = target && target.closest ? target.closest("button") : null;
+      log("tap " + (control ? control.textContent : target && target.tagName) + " defaultPrevented=" + e.defaultPrevented);
+    }, true);
   }
 
   disableDoubleTapDelay();
