@@ -41,7 +41,6 @@
       const pageObject = cloneInto({}, pageWindow);
       for (const method of defs[name]) {
         const call = (...args) => {
-          bridgeCalls++;
           send({ type: "call", iface: name, method: method, args: args.map(toPlainArg) });
         };
         sandboxObject[method] = call;
@@ -146,57 +145,6 @@
     else document.addEventListener("DOMContentLoaded", observe, { once: true });
   }
 
-  // Debug: log each media play/pause with the events just before it, to see what toggles a
-  // player (Plex looped play/pause after a pause tap).
-  let bridgeCalls = 0;
-  function traceMedia() {
-    const recent = [];
-    let moves = 0;
-    const note = (label) => {
-      recent.push(label + "@" + (Date.now() % 100000));
-      if (recent.length > 10) recent.shift();
-    };
-    const types = ["pointerdown", "pointerup", "mousedown", "mouseup", "click", "touchstart", "touchend",
-      "keydown", "resize", "visibilitychange", "blur", "focus", "fullscreenchange"];
-    for (const type of types) {
-      window.addEventListener(type, (e) => note(e.type + (e.isTrusted ? "" : "*")), true);
-    }
-    window.addEventListener("mousemove", () => moves++, true);
-    const report = (e) => {
-      const target = e.target;
-      log("media " + e.type + " t=" + (target && target.currentTime ? target.currentTime.toFixed(1) : "?") +
-        " moves=" + moves + " calls=" + bridgeCalls + " :: " + recent.join(" "));
-      moves = 0;
-      bridgeCalls = 0;
-      recent.length = 0;
-    };
-    document.addEventListener("play", report, true);
-    document.addEventListener("pause", report, true);
-    // Who calls play()/pause(), with the caller's stack; a pause with no call is the engine's.
-    // The wrapper runs in the page's own world (a wrapper from this sandbox broke play()'s
-    // promise and Plex's playback); it only reports through __taplinkTrace.
-    try {
-      exportFunction((name, stack) => {
-        note("call:" + name);
-        log("media call " + name + " :: " + stack);
-      }, pageWindow, { defineAs: "__taplinkTrace" });
-      pageWindow.eval(
-        "(function(){var P=HTMLMediaElement.prototype;['play','pause'].forEach(function(n){" +
-        "var o=P[n];P[n]=function(){try{var s=String(new Error().stack).split('\\n').slice(1,4)" +
-        ".map(function(l){return l.replace(/https?:\\/\\/[^ ]*\\//,'').slice(0,70);}).join(' | ');" +
-        "window.__taplinkTrace(n,s);}catch(e){}return o.apply(this,arguments);};});})();");
-    } catch (e) {
-      log("media call tracing unavailable: " + e);
-    }
-    // Buffering, to tell a stalling player from one being toggled
-    for (const type of ["waiting", "stalled", "canplay", "playing", "seeking", "seeked", "suspend"]) {
-      document.addEventListener(type, (e) => {
-        const media = e.target;
-        note(type + (media && media.readyState !== undefined ? "/rs" + media.readyState : ""));
-      }, true);
-    }
-  }
-
   function onMessage(message) {
     try {
       if (message.type === "interfaces") {
@@ -236,6 +184,5 @@
   disableDoubleTapDelay();
   guardClickThrough();
   keepScrollMetricsFresh();
-  traceMedia();
   connect();
 })();

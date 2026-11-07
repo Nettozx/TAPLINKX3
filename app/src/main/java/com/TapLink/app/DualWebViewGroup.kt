@@ -467,13 +467,15 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
      * Sets the page zoom. The WebView path scales the body with CSS zoom; on GeckoView that also
      * scales players' layout (Plex put subtitles mid-screen, tiny), so there websites in mobile
      * mode are zoomed like a mobile browser does instead: a wider layout viewport (TapLink's
-     * width=600 divided by the zoom), which Gecko scales to fit.
+     * width=600 divided by the zoom), which Gecko scales to fit. Desktop mode lays out at least
+     * at its 1280px desktop width.
      */
     private fun applyWebZoom(zoom: Float, nudge: Boolean = false) {
         val isAppPage = webView.url?.startsWith("file:///android_asset/") == true
         val script =
-                if (geckoSession != null && !isAppPage && !isDesktopMode()) {
-                    val width = Math.round(600f / zoom)
+                if (geckoSession != null && !isAppPage) {
+                    val mobileWidth = Math.round(600f / zoom)
+                    val width = if (isDesktopMode()) maxOf(1280, mobileWidth) else mobileWidth
                     "(function(){var m=document.querySelector('meta[name=\"viewport\"]');" +
                             "if(!m){m=document.createElement('meta');m.name='viewport';" +
                             "(document.head||document.documentElement).appendChild(m);}" +
