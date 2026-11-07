@@ -15,11 +15,7 @@ import org.mozilla.geckoview.WebExtensionController
  * Mozilla's signature), keeps track of each add-on's toolbar button so its popup can be opened, and
  * routes the tabs and options pages add-ons open to the app. All calls on the main thread.
  */
-class GeckoExtensions(
-        private val runtime: GeckoRuntime,
-        private val pageSession: GeckoSession,
-        private val host: Host
-) {
+class GeckoExtensions(private val runtime: GeckoRuntime, private val host: Host) {
 
     interface Host {
         /** Show an add-on popup or tab session in place of the page until Back or it closes. */
@@ -110,8 +106,6 @@ class GeckoExtensions(
     }
 
     init {
-        // Add-ons act on the active tab (toolbar popups don't open without one); TapLink's page is it
-        controller.setTabActive(pageSession, true)
         // The user picks what to install from TapLink's Extensions page, so accept the
         // permissions an add-on asks for (Firefox would show them in a dialog).
         controller.setPromptDelegate(
@@ -151,13 +145,41 @@ class GeckoExtensions(
         return GeckoResult.fromValue(session)
     }
 
+    // The windows' page sessions; the active one is Gecko's active tab
+    private val pageSessions = mutableListOf<GeckoSession>()
+    private var activeSession: GeckoSession? = null
+
+    fun addPageSession(session: GeckoSession) {
+        if (pageSessions.contains(session)) return
+        pageSessions.add(session)
+        extensions.forEach { attachToSession(it, session) }
+    }
+
+    fun removePageSession(session: GeckoSession) {
+        pageSessions.remove(session)
+        if (activeSession === session) activeSession = null
+    }
+
+    /** Add-ons act on the active tab; toolbar popups don't open without one. */
+    fun setActiveSession(session: GeckoSession) {
+        if (activeSession === session) return
+        activeSession?.let { if (it.isOpen) controller.setTabActive(it, false) }
+        activeSession = session
+        controller.setTabActive(session, true)
+    }
+
     private fun attach(extension: WebExtension) {
         if (extension.isBuiltIn) return
         extension.setActionDelegate(actionDelegate)
         extension.setTabDelegate(tabDelegate)
-        // Popups open for the page's tab, as on Firefox for Android
-        pageSession.webExtensionController.setActionDelegate(extension, actionDelegate)
-        pageSession.webExtensionController.setTabDelegate(extension, sessionTabDelegate)
+        pageSessions.forEach { attachToSession(extension, it) }
+    }
+
+    // Popups open for the page's tab, as on Firefox for Android
+    private fun attachToSession(extension: WebExtension, session: GeckoSession) {
+        if (extension.isBuiltIn) return
+        session.webExtensionController.setActionDelegate(extension, actionDelegate)
+        session.webExtensionController.setTabDelegate(extension, sessionTabDelegate)
     }
 
     fun refresh() {

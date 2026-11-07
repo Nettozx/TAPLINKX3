@@ -108,6 +108,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     // Custom WebView to expose protected scroll methods
     private inner class InternalWebView(context: Context) : WebView(context) {
+        // This window's GeckoView page (null while WebView's constructor runs, which calls some of
+        // the overrides below)
+        val geckoTab: GeckoTab? = if (geckoEnabled) GeckoTab(this) else null
+
         fun getHorizontalScrollRange() = super.computeHorizontalScrollRange()
         fun getHorizontalScrollExtent() = super.computeHorizontalScrollExtent()
         fun getHorizontalScrollOffset() = super.computeHorizontalScrollOffset()
@@ -126,52 +130,71 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
 
         private fun loadInGecko(url: String): Boolean {
-            val session = geckoSession ?: return false
+            val tab = geckoTab ?: return false
             if (url.startsWith("javascript:")) {
-                geckoBridge?.evaluate(url.removePrefix("javascript:"), null)
+                tab.bridge.evaluate(url.removePrefix("javascript:"), null)
             } else {
                 // Navigating (the Dashboard button, a link) shows the page again
-                closeExtensionPopup()
-                session.loadUri(GeckoEngine.toGeckoUri(url))
+                if (tab === currentGeckoTab) closeExtensionPopup()
+                tab.session.loadUri(GeckoEngine.toGeckoUri(url))
             }
             return true
         }
 
-        override fun getUrl(): String? = if (geckoSession != null) geckoUrl else super.getUrl()
+        override fun getUrl(): String? {
+            val tab = geckoTab ?: return super.getUrl()
+            return tab.url
+        }
 
-        override fun getTitle(): String? = if (geckoSession != null) geckoTitle else super.getTitle()
+        override fun getTitle(): String? {
+            val tab = geckoTab ?: return super.getTitle()
+            return tab.title
+        }
 
         // Page scripts and JS interfaces go through the taplink_bridge WebExtension (GeckoBridge)
         override fun evaluateJavascript(script: String, resultCallback: ValueCallback<String>?) {
-            val bridge = geckoBridge
+            val bridge = geckoTab?.bridge
             if (bridge != null) bridge.evaluate(script, resultCallback) else super.evaluateJavascript(script, resultCallback)
         }
 
         override fun addJavascriptInterface(obj: Any, name: String) {
-            geckoBridge?.addInterface(obj, name)
+            geckoTab?.bridge?.addInterface(obj, name)
             super.addJavascriptInterface(obj, name)
         }
 
         override fun removeJavascriptInterface(name: String) {
-            geckoBridge?.removeInterface(name)
+            geckoTab?.bridge?.removeInterface(name)
             super.removeJavascriptInterface(name)
         }
 
-        override fun canGoBack(): Boolean = if (geckoSession != null) geckoCanGoBack else super.canGoBack()
+        override fun canGoBack(): Boolean {
+            val tab = geckoTab ?: return super.canGoBack()
+            return tab.canGoBack
+        }
 
-        override fun canGoForward(): Boolean =
-                if (geckoSession != null) geckoCanGoForward else super.canGoForward()
+        override fun canGoForward(): Boolean {
+            val tab = geckoTab ?: return super.canGoForward()
+            return tab.canGoForward
+        }
 
         override fun goBack() {
-            geckoSession?.goBack() ?: super.goBack()
+            val tab = geckoTab ?: return super.goBack()
+            tab.session.goBack()
         }
 
         override fun goForward() {
-            geckoSession?.goForward() ?: super.goForward()
+            val tab = geckoTab ?: return super.goForward()
+            tab.session.goForward()
         }
 
         override fun reload() {
-            geckoSession?.reload() ?: super.reload()
+            val tab = geckoTab ?: return super.reload()
+            tab.session.reload()
+        }
+
+        override fun destroy() {
+            geckoTab?.close()
+            super.destroy()
         }
 
         // MainActivity's listener blocks real touchpad touches (cursor/scroll/keyboard modes) and only
@@ -260,12 +283,15 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     val webViewsContainer: FrameLayout =
             FrameLayout(context).apply { setBackgroundColor(Color.BLACK) }
 
-    // Experimental GeckoView engine (see GeckoEngine). A single session shared by all tabs for now.
-    private var geckoUrl: String? = null
-    private var geckoCanGoBack = false
-    private var geckoCanGoForward = false
+    // GeckoView engine (see GeckoEngine): each window's InternalWebView owns a GeckoTab (its own
+    // session, page bridge and navigation state); the one GeckoView shows the active window's.
+    private val geckoEnabled = GeckoEngine.isEnabled(context)
     private var forwardingToGecko = false
-    private var geckoTitle: String? = null
+    private var currentGeckoTab: GeckoTab? = null
+
+    // The active window's page
+    private val geckoSession: GeckoSession?
+        get() = currentGeckoTab?.session
 
     // Gecko says when a text field gains focus, in any frame (the app's JS check only sees the top
     // document, e.g. not Plex's sign-in frame). Show the app's keyboard instead of the system one.
@@ -281,7 +307,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
             }
 
-    private val geckoBridge: GeckoBridge? = if (GeckoEngine.isEnabled(context)) GeckoBridge() else null
 
     // Site permissions: location, camera/microphone and notifications ask with TapLink's dialog;
     // autoplay and storage are allowed as browsers do. (The WebView path granted everything.)
@@ -386,8 +411,14 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 "This site"
             }
 
-    private val geckoSession: GeckoSession? =
-            if (GeckoEngine.isEnabled(context)) {
+    private inner class GeckoTab(val owner: InternalWebView) {
+        val bridge = GeckoBridge()
+        var url: String? = null
+        var title: String? = null
+        var canGoBack = false
+        var canGoForward = false
+
+        val session: GeckoSession =
                 GeckoSession().apply {
                     navigationDelegate =
                             object : GeckoSession.NavigationDelegate {
@@ -398,15 +429,14 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                         hasUserGesture: Boolean
                                 ) {
                                     Log.d("GeckoEngine", "location $url")
-                                    geckoUrl = GeckoEngine.fromGeckoUri(url)
+                                    this@GeckoTab.url = GeckoEngine.fromGeckoUri(url)
                                 }
 
                                 override fun onLoadRequest(
                                         session: GeckoSession,
                                         request: GeckoSession.NavigationDelegate.LoadRequest
                                 ): GeckoResult<AllowOrDeny>? {
-                                    Log.d("GeckoEngine", "load request ${request.uri} target=${request.target}")
-                                    // No multi-session tabs yet: open new-window links in the current page
+                                    // Links that ask for a new window open in this window's page
                                     if (request.target == GeckoSession.NavigationDelegate.TARGET_WINDOW_NEW) {
                                         session.loadUri(request.uri)
                                         return GeckoResult.fromValue(AllowOrDeny.DENY)
@@ -415,90 +445,105 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                 }
 
                                 override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) {
-                                    geckoCanGoBack = canGoBack
+                                    this@GeckoTab.canGoBack = canGoBack
                                 }
 
                                 override fun onCanGoForward(session: GeckoSession, canGoForward: Boolean) {
-                                    geckoCanGoForward = canGoForward
+                                    this@GeckoTab.canGoForward = canGoForward
                                 }
                             }
                     progressDelegate =
                             object : GeckoSession.ProgressDelegate {
                                 override fun onPageStart(session: GeckoSession, url: String) {
-                                    Log.d("GeckoEngine", "page start $url")
-                                    onGeckoPageStarted(url)
+                                    onGeckoPageStarted(this@GeckoTab, url)
                                 }
 
                                 override fun onPageStop(session: GeckoSession, success: Boolean) {
-                                    Log.d("GeckoEngine", "page stop success=$success")
-                                    onGeckoPageFinished()
+                                    onGeckoPageFinished(this@GeckoTab)
                                 }
 
                                 override fun onProgressChange(session: GeckoSession, progress: Int) {
-                                    onGeckoProgress(progress)
+                                    onGeckoProgress(this@GeckoTab, progress)
                                 }
                             }
                     contentDelegate =
                             object : GeckoSession.ContentDelegate {
                                 override fun onTitleChange(session: GeckoSession, title: String?) {
-                                    geckoTitle = title
+                                    this@GeckoTab.title = title
                                 }
 
                                 override fun onFullScreen(session: GeckoSession, fullScreen: Boolean) {
                                     Log.d("GeckoEngine", "fullscreen $fullScreen")
-                                    onGeckoFullScreen(fullScreen)
+                                    if (this@GeckoTab === currentGeckoTab) onGeckoFullScreen(fullScreen)
                                 }
                             }
-                    // Gecko says when a text field gains focus, in any frame (the app's JS check
-                    // only sees the top document, e.g. not Plex's sign-in frame). Show the app's
-                    // keyboard instead of the system one.
                     textInput.setDelegate(geckoTextInputDelegate)
                     permissionDelegate = geckoPermissionDelegate
                     open(GeckoEngine.runtime(context))
-                    val bridge = geckoBridge
-                    if (bridge != null) {
-                        GeckoEngine.bridgeExtension(context)
-                                .accept(
-                                        { extension ->
-                                            if (extension != null) {
-                                                webExtensionController.setMessageDelegate(
-                                                        extension,
-                                                        bridge,
-                                                        GeckoEngine.BRIDGE_NATIVE_APP
-                                                )
-                                                Log.d("GeckoEngine", "bridge extension ready")
-                                            }
-                                        },
-                                        { e -> Log.e("GeckoEngine", "bridge extension failed", e) }
-                                )
-                    }
                 }
-            } else {
-                null
+
+        init {
+            GeckoEngine.bridgeExtension(context)
+                    .accept(
+                            { extension ->
+                                if (extension != null && session.isOpen) {
+                                    session.webExtensionController.setMessageDelegate(
+                                            extension,
+                                            bridge,
+                                            GeckoEngine.BRIDGE_NATIVE_APP
+                                    )
+                                }
+                            },
+                            { e -> Log.e("GeckoEngine", "bridge extension failed", e) }
+                    )
+            val extensions = geckoExtensions
+            if (extensions != null) {
+                bridge.addInterface(ExtensionsJsInterface(), "TapLinkExtensions")
+                extensions.addPageSession(session)
             }
+        }
+
+        fun close() {
+            geckoExtensions?.removePageSession(session)
+            if (currentGeckoTab === this) currentGeckoTab = null
+            session.close()
+        }
+    }
 
     // TextureView backend: the right eye is mirrored with PixelCopy, which can't see SurfaceView layers
     private val geckoView: GeckoView? =
-            geckoSession?.let { session ->
-                GeckoView(context).apply {
-                    setViewBackend(GeckoView.BACKEND_TEXTURE_VIEW)
-                    setSession(session)
-                    // Real touchpad touches land here directly (it's on top of the tabs): filter them
-                    // through the active tab's MainActivity listener like the WebView did. Events the
-                    // app forwards via InternalWebView have already been filtered.
-                    setOnTouchListener { _, event -> !forwardingToGecko && activeTabBlocksTouch(event) }
-                    elevation = 10f // above the (now empty) tab WebViews
-                    // Debug URL from the launch intent; after tab restore, which loads the saved URL
-                    GeckoEngine.pendingUrl?.let { url ->
-                        GeckoEngine.pendingUrl = null
-                        android.os.Handler(android.os.Looper.getMainLooper())
-                                .postDelayed({
-                                    Log.d("GeckoEngine", "debug url ${url.take(80)}")
-                                    session.loadUri(GeckoEngine.toGeckoUri(url))
-                                }, 3000)
+            if (!geckoEnabled) null
+            else
+                    GeckoView(context).apply {
+                        setViewBackend(GeckoView.BACKEND_TEXTURE_VIEW)
+                        // Real touchpad touches land here directly (it's on top of the tabs): filter them
+                        // through the active tab's MainActivity listener like the WebView did. Events the
+                        // app forwards via InternalWebView have already been filtered.
+                        setOnTouchListener { _, event -> !forwardingToGecko && activeTabBlocksTouch(event) }
+                        elevation = 10f // above the (now empty) tab WebViews
                     }
-                }
-            }
+
+    /** Shows [tab]'s page in the GeckoView: called whenever the active window changes. */
+    private fun showGeckoTab(tab: GeckoTab?) {
+        val gecko = geckoView ?: return
+        if (tab == null || tab === currentGeckoTab) return
+        closeExtensionPopup()
+        if (geckoFullScreen) {
+            geckoSession?.exitFullScreen()
+            onGeckoFullScreen(false)
+        }
+        currentGeckoTab = tab
+        if (gecko.session !== tab.session) {
+            gecko.releaseSession()
+            gecko.setSession(tab.session)
+        }
+        geckoExtensions?.setActiveSession(tab.session)
+        // Debug URL from the launch intent, after tab restore loads the saved URL
+        GeckoEngine.pendingUrl?.let { url ->
+            GeckoEngine.pendingUrl = null
+            postDelayed({ currentGeckoTab?.session?.loadUri(GeckoEngine.toGeckoUri(url)) }, 3000)
+        }
+    }
 
     init {
         attachGeckoView()
@@ -509,11 +554,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private var extensionPopup: GeckoSession? = null
 
     private val geckoExtensions: GeckoExtensions? =
-            if (geckoSession == null) null
+            if (!geckoEnabled) null
             else
                     GeckoExtensions(
                             GeckoEngine.runtime(context),
-                            geckoSession,
                             object : GeckoExtensions.Host {
                                 override fun showExtensionPopup(session: GeckoSession) {
                                     post { showExtensionPopupSession(session) }
@@ -548,9 +592,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                             }
                     )
 
-    init {
-        if (geckoExtensions != null) geckoBridge?.addInterface(ExtensionsJsInterface(), "TapLinkExtensions")
-    }
 
     private fun showExtensionPopupSession(session: GeckoSession) {
         val gecko = geckoView ?: return
@@ -672,28 +713,28 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     // Gecko page events drive the active tab's WebViewClient/WebChromeClient, so MainActivity's page
     // logic (URL persistence, progress, viewport/input/observer injection via the bridge) still runs.
-    private fun onGeckoPageStarted(url: String) {
+    private fun onGeckoPageStarted(tab: GeckoTab, url: String) {
         if (url == "about:blank") return // MainActivity treats about:blank loads as errors and reloads
         try {
-            webView.webViewClient.onPageStarted(webView, GeckoEngine.fromGeckoUri(url), null)
+            tab.owner.webViewClient.onPageStarted(tab.owner, GeckoEngine.fromGeckoUri(url), null)
         } catch (e: Exception) {
             Log.e("GeckoEngine", "onPageStarted failed", e)
         }
     }
 
-    private fun onGeckoPageFinished() {
-        val url = geckoUrl ?: return
+    private fun onGeckoPageFinished(tab: GeckoTab) {
+        val url = tab.url ?: return
         if (url == "about:blank") return
         try {
-            webView.webViewClient.onPageFinished(webView, url)
+            tab.owner.webViewClient.onPageFinished(tab.owner, url)
         } catch (e: Exception) {
             Log.e("GeckoEngine", "onPageFinished failed", e)
         }
         // Websites only: app pages keep their design size (the WebView never re-applied the saved
         // zoom on load, so applying it here shrank the dashboard)
         if (url.startsWith("file:///android_asset/")) return
-        val zoom = effectiveWebZoom()
-        if (zoom != 1f) applyWebZoom(zoom)
+        val zoom = effectiveWebZoom(tab.owner)
+        if (zoom != 1f) applyWebZoom(zoom, target = tab.owner)
     }
 
     /**
@@ -703,10 +744,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
      * width=600 divided by the zoom), which Gecko scales to fit. Desktop mode lays out at least
      * at its 1280px desktop width.
      */
-    private fun applyWebZoom(zoom: Float, nudge: Boolean = false) {
-        val isAppPage = webView.url?.startsWith("file:///android_asset/") == true
+    private fun applyWebZoom(zoom: Float, nudge: Boolean = false, target: WebView = webView) {
+        val isAppPage = target.url?.startsWith("file:///android_asset/") == true
         val script =
-                if (geckoSession != null && !isAppPage) {
+                if (geckoEnabled && !isAppPage) {
                     val mobileWidth = Math.round(600f / zoom)
                     val width = if (isDesktopMode()) maxOf(1280, mobileWidth) else mobileWidth
                     "(function(){var m=document.querySelector('meta[name=\"viewport\"]');" +
@@ -719,14 +760,14 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 } else {
                     "document.body && (document.body.style.zoom = '$zoom');"
                 }
-        webView.evaluateJavascript(script, null)
+        target.evaluateJavascript(script, null)
     }
 
     // GeckoView lays websites out tighter than the WebView did; start them at 90% (the zoom-out
     // button's first step). App pages are designed for 100%.
-    private fun effectiveWebZoom(): Float {
+    private fun effectiveWebZoom(target: WebView = webView): Float {
         val base =
-                if (geckoSession != null && webView.url?.startsWith("file:///android_asset/") != true) {
+                if (geckoEnabled && target.url?.startsWith("file:///android_asset/") != true) {
                     0.9f
                 } else {
                     1f
@@ -828,9 +869,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         event.recycle()
     }
 
-    private fun onGeckoProgress(progress: Int) {
+    private fun onGeckoProgress(tab: GeckoTab, progress: Int) {
         try {
-            webView.webChromeClient?.onProgressChanged(webView, progress)
+            tab.owner.webChromeClient?.onProgressChanged(tab.owner, progress)
         } catch (e: Exception) {
             Log.e("GeckoEngine", "onProgressChanged failed", e)
         }
@@ -2455,6 +2496,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Switch active window
         activeWindowId = id
         webView = targetWindow.webView
+        showGeckoTab(webView.geckoTab)
 
         // Show new active webview and bring to front within container to ensure z-ordering
         webView.visibility = View.VISIBLE
@@ -2666,7 +2708,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
                     var restored = false
                     // WebView history bundles mean nothing to GeckoView: load the saved URL instead
-                    if (stateString.isNotEmpty() && geckoSession == null) {
+                    if (stateString.isNotEmpty() && !geckoEnabled) {
                         try {
                             val bytes = Base64.decode(stateString, Base64.DEFAULT)
                             val parcel = Parcel.obtain()
@@ -2853,6 +2895,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // Initial WebView configuration
         val initialWebView = InternalWebView(context)
         webView = initialWebView
+        showGeckoTab(initialWebView.geckoTab)
         configureWebView(webView) // Local basic config
         mobileUserAgent = webView.settings.userAgentString
         desktopUserAgent = buildDesktopUserAgentFromMobile(mobileUserAgent)
@@ -6457,7 +6500,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         return !isInScrollMode && !geckoFullScreen && leftNavigationBar.visibility == View.VISIBLE
     }
 
-    fun isGeckoEngine(): Boolean = geckoSession != null
+    fun isGeckoEngine(): Boolean = geckoEnabled
 
     fun isGeckoFullScreen(): Boolean = geckoFullScreen
 
