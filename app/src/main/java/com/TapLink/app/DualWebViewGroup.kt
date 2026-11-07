@@ -531,7 +531,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // cut off, or the page left zoomed in) until the viewport changes, as a zoom button press
         // did. Nudge it once the transition has settled.
         if (webView.url?.startsWith("file:///android_asset/") != true) {
-            for (delay in longArrayOf(700, 1600)) {
+            for (delay in longArrayOf(250, 700, 1600)) {
                 postDelayed({ if (geckoFullScreen == fullScreen) applyWebZoom(effectiveWebZoom(), nudge = true) }, delay)
             }
         }
