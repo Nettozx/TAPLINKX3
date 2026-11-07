@@ -456,7 +456,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         } catch (e: Exception) {
             Log.e("GeckoEngine", "onPageFinished failed", e)
         }
+        // Websites only: app pages keep their design size (the WebView never re-applied the saved
+        // zoom on load, so applying it here shrank the dashboard)
+        if (url.startsWith("file:///android_asset/")) return
         val zoom = effectiveWebZoom()
+        Log.d("GeckoEngine", "site zoom $zoom (saved $currentWebZoom)")
         if (zoom != 1f) {
             webView.evaluateJavascript("document.body && (document.body.style.zoom = '$zoom');", null)
         }
