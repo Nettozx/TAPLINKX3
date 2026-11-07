@@ -5780,7 +5780,6 @@ class MainActivity :
         super.onNewIntent(intent)
         applyGroqKeyExtra(intent)
         intent.getStringExtra(GeckoEngine.EXTRA_URL)?.let { url ->
-            android.util.Log.d("GeckoEngine", "debug url ${url.take(80)}")
             webView.loadUrl(url)
         }
     }

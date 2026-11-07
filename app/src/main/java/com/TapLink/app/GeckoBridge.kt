@@ -64,11 +64,16 @@ class GeckoBridge : WebExtension.MessageDelegate, WebExtension.PortDelegate {
         interfaces.remove(name)
     }
 
+    /** The layout width websites get for the site zoom (0: none); sent to each page as it connects. */
+    var viewportWidthProvider: (() -> Int)? = null
+
     override fun onConnect(port: WebExtension.Port) {
         Log.d(TAG, "Page connected (${pending.size} pending)")
         this.port = port
         loggedCalls.clear()
         port.setDelegate(this)
+        val width = viewportWidthProvider?.invoke() ?: 0
+        if (width > 0) port.postMessage(JSONObject().put("type", "viewport").put("width", width))
         port.postMessage(interfacesMessage())
         while (pending.isNotEmpty()) port.postMessage(pending.removeFirst())
     }

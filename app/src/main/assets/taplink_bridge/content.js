@@ -181,7 +181,6 @@
       }
     };
     const setPosition = (latitude, longitude) => {
-      log("geolocation: position from TapLink, " + waiting.length + " waiting, " + watchers.size + " watching");
       position = { latitude: Number(latitude), longitude: Number(longitude) };
       wantLocation = false;
       for (const w of waiting.splice(0)) {
@@ -194,7 +193,6 @@
     exportFunction(setPosition, pageWindow, { defineAs: "__taplinkSetPosition" });
 
     exportFunction(function (success, error) {
-      log("geolocation: getCurrentPosition (" + (position ? "have" : "no") + " position)");
       if (typeof success !== "function") return;
       if (position) {
         setTimeout(() => deliver(success), 0);
@@ -218,7 +216,6 @@
     }, geo, { defineAs: "getCurrentPosition" });
 
     exportFunction(function (success) {
-      log("geolocation: watchPosition (" + (position ? "have" : "no") + " position)");
       if (typeof success !== "function") return 0;
       const id = nextWatchId++;
       watchers.set(id, success);
@@ -232,9 +229,31 @@
     }, geo, { defineAs: "clearWatch" });
   }
 
+  // The site zoom as a layout width, applied as the page starts (TapLink re-applies it when the
+  // load finishes). Not on TapLink's own pages, which are designed for their own width.
+  function applyViewport(width) {
+    if (!/^https?:$/.test(location.protocol) || location.host === "127.0.0.1:37813") return;
+    const set = () => {
+      let meta = document.querySelector('meta[name="viewport"]');
+      if (!meta) {
+        const parent = document.head || document.documentElement;
+        if (!parent) return;
+        meta = document.createElement("meta");
+        meta.name = "viewport";
+        parent.appendChild(meta);
+      }
+      meta.content = "width=" + width;
+    };
+    set();
+    // The page's own viewport tag can arrive later in the HTML
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", set, { once: true });
+  }
+
   function onMessage(message) {
     try {
-      if (message.type === "interfaces") {
+      if (message.type === "viewport") {
+        applyViewport(message.width);
+      } else if (message.type === "interfaces") {
         defineInterfaces(message.defs);
       } else if (message.type === "eval") {
         evaluate(message.id, message.code);

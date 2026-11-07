@@ -67,7 +67,7 @@ class GeckoExtensions(private val runtime: GeckoRuntime, private val host: Host)
                         source: WebExtension,
                         createDetails: WebExtension.CreateTabDetails
                 ): GeckoResult<GeckoSession>? {
-                    Log.d(TAG, "${source.id} opens a tab: ${createDetails.url}")
+                    Log.d(TAG, "${source.id} opens a tab")
                     val session = newSession(source)
                     host.showExtensionPopup(session)
                     return GeckoResult.fromValue(session)

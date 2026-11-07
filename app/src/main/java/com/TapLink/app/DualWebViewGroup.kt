@@ -136,6 +136,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             } else {
                 // Navigating (the Dashboard button, a link) shows the page again
                 if (tab === currentGeckoTab) closeExtensionPopup()
+                tab.requestedUrl = url
                 tab.session.loadUri(GeckoEngine.toGeckoUri(url))
             }
             return true
@@ -143,7 +144,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         override fun getUrl(): String? {
             val tab = geckoTab ?: return super.getUrl()
-            return tab.url ?: tab.deferredUrl
+            return tab.url ?: tab.requestedUrl ?: tab.deferredUrl
         }
 
         /** Restore: load [url] when this window is first shown (GeckoView), now otherwise. */
@@ -424,6 +425,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // A restored window's URL, loaded the first time the window is shown: restoring every
         // window's page at once made startup take 15-20 s on the glasses
         var deferredUrl: String? = null
+
+        // The URL being loaded, until Gecko reports the location: startup checks saw no URL in the
+        // meantime and loaded the dashboard over the restored page
+        var requestedUrl: String? = null
         var title: String? = null
         var canGoBack = false
         var canGoForward = false
@@ -438,7 +443,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                         perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>,
                                         hasUserGesture: Boolean
                                 ) {
-                                    Log.d("GeckoEngine", "location $url")
                                     this@GeckoTab.url = GeckoEngine.fromGeckoUri(url)
                                 }
 
@@ -492,6 +496,18 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                     this@GeckoTab.title = title
                                 }
 
+                                // Android can kill Gecko's content process while the screen is off;
+                                // the session is then closed and blank ("Tab"). Reopen it and reload.
+                                override fun onKill(session: GeckoSession) {
+                                    Log.w("GeckoEngine", "content process killed")
+                                    post { recover() }
+                                }
+
+                                override fun onCrash(session: GeckoSession) {
+                                    Log.w("GeckoEngine", "content process crashed")
+                                    post { recover() }
+                                }
+
                                 override fun onFullScreen(session: GeckoSession, fullScreen: Boolean) {
                                     Log.d("GeckoEngine", "fullscreen $fullScreen")
                                     if (this@GeckoTab === currentGeckoTab) onGeckoFullScreen(fullScreen)
@@ -503,6 +519,35 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
 
         init {
+            bridge.viewportWidthProvider = { siteViewportWidth() }
+            attachBridge()
+            val extensions = geckoExtensions
+            if (extensions != null) {
+                bridge.addInterface(ExtensionsJsInterface(), "TapLinkExtensions")
+                extensions.addPageSession(session)
+            }
+        }
+
+        private fun recover() {
+            val lastUrl = url ?: requestedUrl ?: deferredUrl ?: return
+            if (!session.isOpen) {
+                session.open(GeckoEngine.runtime(context))
+                attachBridge()
+                geckoExtensions?.let {
+                    it.removePageSession(session)
+                    it.addPageSession(session)
+                    if (this === currentGeckoTab) it.setActiveSession(session)
+                }
+            }
+            if (this === currentGeckoTab) {
+                session.setActive(true)
+                owner.loadUrl(lastUrl)
+            } else {
+                deferredUrl = lastUrl
+            }
+        }
+
+        private fun attachBridge() {
             GeckoEngine.bridgeExtension(context)
                     .accept(
                             { extension ->
@@ -516,11 +561,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                             },
                             { e -> Log.e("GeckoEngine", "bridge extension failed", e) }
                     )
-            val extensions = geckoExtensions
-            if (extensions != null) {
-                bridge.addInterface(ExtensionsJsInterface(), "TapLinkExtensions")
-                extensions.addPageSession(session)
-            }
         }
 
         fun close() {
@@ -760,14 +800,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         } catch (e: Exception) {
             Log.e("GeckoEngine", "onPageStarted failed", e)
         }
-        // Zoom websites from the start of the load (the bridge runs the script as soon as the page
-        // connects), not only once it finishes: heavy pages like ChatGPT laid out at the wrong
-        // width for many seconds and then jumped. It's applied again when the load finishes.
-        // (The tab's URL may still be the previous page's here, so pass the new page's facts.)
-        if (!GeckoEngine.fromGeckoUri(url).orEmpty().startsWith("file:///android_asset/")) {
-            val zoom = currentWebZoom * 0.9f
-            if (zoom != 1f) applyWebZoom(zoom, target = tab.owner, appPage = false)
-        }
     }
 
     private fun onGeckoPageFinished(tab: GeckoTab) {
@@ -815,6 +847,12 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     "document.body && (document.body.style.zoom = '$zoom');"
                 }
         target.evaluateJavascript(script, null)
+    }
+
+    /** The site zoom as a layout width (see applyWebZoom); the bridge gives it to pages as they start. */
+    private fun siteViewportWidth(): Int {
+        val mobileWidth = Math.round(600f / (currentWebZoom * 0.9f))
+        return if (isDesktopMode()) maxOf(1280, mobileWidth) else mobileWidth
     }
 
     // GeckoView lays websites out tighter than the WebView did; start them at 90% (the zoom-out
