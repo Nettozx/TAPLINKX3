@@ -359,6 +359,7 @@ class MainActivity :
                         fullScreenCustomView != null -> {
                             hideFullScreenCustomView()
                         }
+                        dualWebViewGroup.exitGeckoFullScreen() -> {}
                         isKeyboardVisible || dualWebViewGroup.isUrlEditing() -> {
                             // Hide keyboard and exit URL editing
                             hideCustomKeyboard()

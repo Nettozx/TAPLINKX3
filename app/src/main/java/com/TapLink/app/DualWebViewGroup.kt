@@ -40,7 +40,6 @@ import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.view.InputDevice
 import android.webkit.ValueCallback
-import android.webkit.WebChromeClient
 import android.webkit.WebView
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
@@ -476,34 +475,34 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     private var geckoFullScreen = false
+    private val geckoFullScreenHidden = mutableMapOf<View, Int>()
 
-    // Page fullscreen (video players) goes through the same path as WebView's onShowCustomView:
-    // TapLink's fullscreen overlay hides its UI and scrollbars and shows its own media controls.
+    // Page fullscreen (video players). WebView hands over a separate view for TapLink's fullscreen
+    // overlay; moving the GeckoView there detaches it and Gecko leaves fullscreen right away. So
+    // keep it in place, hide TapLink's bars and scrollbars, and give the page the whole eye (Gecko
+    // sizes fullscreen content to the 640x480 screen). Taps and hover still reach the page, so the
+    // player's own controls work; Back exits.
     private fun onGeckoFullScreen(fullScreen: Boolean) {
-        val gecko = geckoView ?: return
-        if (fullScreen == geckoFullScreen) return
+        if (geckoView == null || fullScreen == geckoFullScreen) return
         geckoFullScreen = fullScreen
-        val client = webView.webChromeClient
-        Log.d("GeckoEngine", "fullscreen overlay ${if (fullScreen) "show" else "hide"} client=${client != null}")
-        if (client == null) return
         if (fullScreen) {
-            client.onShowCustomView(
-                    gecko,
-                    object : WebChromeClient.CustomViewCallback {
-                        override fun onCustomViewHidden() {
-                            // TapLink closed its overlay (exit button, Back): leave page fullscreen too
-                            if (geckoFullScreen) {
-                                geckoFullScreen = false
-                                geckoSession?.exitFullScreen()
-                            }
-                            post { attachGeckoView() }
-                        }
-                    }
-            )
+            if (keyboardContainer.visibility == View.VISIBLE) keyboardListener?.onHideKeyboard()
+            for (view in arrayOf<View>(leftToggleBar, leftNavigationBar, leftSystemInfoView, urlEditText)) {
+                geckoFullScreenHidden[view] = view.visibility
+                view.visibility = View.GONE
+            }
         } else {
-            client.onHideCustomView()
-            post { attachGeckoView() }
+            geckoFullScreenHidden.forEach { (view, visibility) -> view.visibility = visibility }
+            geckoFullScreenHidden.clear()
         }
+        updateScrollBarsVisibility()
+    }
+
+    /** Back: leaves page fullscreen on GeckoView. False when not in it. */
+    fun exitGeckoFullScreen(): Boolean {
+        if (!geckoFullScreen) return false
+        geckoSession?.exitFullScreen()
+        return true
     }
 
     // The WebView never got hover events; Gecko pages (e.g. video players showing their controls)
@@ -513,7 +512,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     private fun dispatchGeckoHover(screenX: Float, screenY: Float) {
         val gecko = geckoView ?: return
-        if (geckoFullScreen || gecko.parent == null) return
+        if (gecko.parent == null) return
         val now = SystemClock.uptimeMillis()
         if (now - lastGeckoHoverAt < 33) return
         lastGeckoHoverAt = now
@@ -1236,7 +1235,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val isFrozen = shouldFreezeScrollBars() && !isInteractingWithScrollBar
 
         // Determine mode-specific base constraints
-        val isScrollModeActive = isInScrollMode || isNavBarsHidden
+        val isScrollModeActive = isInScrollMode || isNavBarsHidden || geckoFullScreen
 
         // Base dimensions
         val containerWidth = 640
@@ -1259,8 +1258,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
         val baseBottomMargin = if (keyboardVisible) 0 else rawBottomMargin
 
-        // If anchored, scrollbars are always hidden
-        if (isAnchored) {
+        // If anchored (or in GeckoView page fullscreen), scrollbars are always hidden
+        if (isAnchored || geckoFullScreen) {
             lastHorzScrollableAt = 0L
             lastVertScrollableAt = 0L
             horizontalScrollBar.visibility = View.GONE
