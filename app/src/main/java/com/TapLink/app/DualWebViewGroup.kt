@@ -488,6 +488,12 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     private fun isExtensionsPageOpen(): Boolean = webView.url == EXTENSIONS_PAGE_URL
 
+    /** The nav bar's Extensions button. (On the WebView engine the page says add-ons need Gecko.) */
+    fun openExtensionsPage() {
+        closeExtensionPopup()
+        webView.loadUrl(EXTENSIONS_PAGE_URL)
+    }
+
     private fun pushExtensionsToPage() {
         val extensions = geckoExtensions ?: return
         if (!isExtensionsPageOpen()) return
@@ -3132,7 +3138,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             chatView.disableSystemKeyboard()
 
             // Setup listener for Chat button
-            leftNavigationBar.findViewById<View>(R.id.btnChat)?.setOnClickListener { toggleChat() }
+            leftNavigationBar.findViewById<View>(R.id.btnChat)?.setOnClickListener { openExtensionsPage() }
             postDelayed(
                     {
                         initializeToggleButtons()
@@ -6526,8 +6532,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             setNavBarsHidden(true) // Hide nav bars but keep cursor visible
             return
         }
+        // The former TapLink AI chat button
         if (key == "chat") {
-            toggleChat()
+            openExtensionsPage()
             return
         }
         navigationListener?.let { listener ->
