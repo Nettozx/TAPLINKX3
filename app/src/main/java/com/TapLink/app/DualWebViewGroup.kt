@@ -494,25 +494,30 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     private var geckoFullScreen = false
-    private val geckoFullScreenHidden = mutableMapOf<View, Int>()
+    private var navBarsHiddenBeforeFullScreen = false
 
     // Page fullscreen (video players). WebView hands over a separate view for TapLink's fullscreen
     // overlay; moving the GeckoView there detaches it and Gecko leaves fullscreen right away. So
-    // keep it in place, hide TapLink's bars and scrollbars, and give the page the whole eye (Gecko
-    // sizes fullscreen content to the 640x480 screen). Taps and hover still reach the page, so the
-    // player's own controls work; Back exits.
+    // keep it in place and switch on TapLink's own hide-bars mode (the nav bar's fullscreen icon),
+    // plus no scrollbars and no show-bars button, giving the page the whole eye (Gecko sizes
+    // fullscreen content to the 640x480 screen). Taps and hover still reach the page, so the
+    // player's own controls work; Back or double tap exits.
     private fun onGeckoFullScreen(fullScreen: Boolean) {
         if (geckoView == null || fullScreen == geckoFullScreen) return
         geckoFullScreen = fullScreen
         if (fullScreen) {
             if (keyboardContainer.visibility == View.VISIBLE) keyboardListener?.onHideKeyboard()
-            for (view in arrayOf<View>(leftToggleBar, leftNavigationBar, leftSystemInfoView, urlEditText)) {
-                geckoFullScreenHidden[view] = view.visibility
-                view.visibility = View.GONE
-            }
+            navBarsHiddenBeforeFullScreen = isNavBarsHidden
+            setNavBarsHidden(true)
+            btnShowNavBars.animate().cancel()
+            btnShowNavBars.visibility = View.GONE
         } else {
-            geckoFullScreenHidden.forEach { (view, visibility) -> view.visibility = visibility }
-            geckoFullScreenHidden.clear()
+            if (navBarsHiddenBeforeFullScreen) {
+                btnShowNavBars.alpha = 1f
+                btnShowNavBars.visibility = View.VISIBLE
+            } else {
+                setNavBarsHidden(false)
+            }
         }
         updateScrollBarsVisibility()
         requestLayout()
