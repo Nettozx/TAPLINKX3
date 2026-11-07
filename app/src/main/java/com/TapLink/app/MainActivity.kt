@@ -2571,6 +2571,7 @@ class MainActivity :
             dualWebViewGroup.sendTextToChatInput(text)
             return
         } else {
+            if (dualWebViewGroup.commitTextToGecko(text)) return
             webView.evaluateJavascript(
                     """
         (function() {
@@ -2659,6 +2660,7 @@ class MainActivity :
             dualWebViewGroup.sendBackspaceToChatInput()
             return
         } else {
+            if (dualWebViewGroup.sendBackspaceToGecko()) return
             webView.evaluateJavascript(
                     """
         (function() {

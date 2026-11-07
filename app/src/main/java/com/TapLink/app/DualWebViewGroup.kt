@@ -29,6 +29,8 @@ import android.view.GestureDetector
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.KeyEvent
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputConnection
 import android.view.MotionEvent
 import android.view.PixelCopy
 import android.view.SurfaceHolder
@@ -188,6 +190,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     } else {
                         event
                     }
+            // Gecko only routes text input (and its show-keyboard signal) to a focused view
+            if (event.actionMasked == MotionEvent.ACTION_DOWN && !gecko.hasFocus()) gecko.requestFocus()
             forwardingToGecko = true
             val handled =
                     try {
@@ -324,6 +328,20 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                     geckoTitle = title
                                 }
                             }
+                    // Gecko says when a text field gains focus, in any frame (the app's JS check
+                    // only sees the top document, e.g. not Plex's sign-in frame). Show the app's
+                    // keyboard instead of the system one.
+                    textInput.delegate =
+                            object : GeckoSession.TextInputDelegate {
+                                override fun showSoftInput(session: GeckoSession) {
+                                    Log.d("GeckoEngine", "showSoftInput")
+                                    post { keyboardListener?.onShowKeyboard() }
+                                }
+
+                                override fun hideSoftInput(session: GeckoSession) {
+                                    Log.d("GeckoEngine", "hideSoftInput")
+                                }
+                            }
                     open(GeckoEngine.runtime(context))
                     val bridge = geckoBridge
                     if (bridge != null) {
@@ -373,6 +391,40 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     init {
         attachGeckoView()
     }
+
+    /**
+     * GeckoView: types into the focused text field, in any frame, the way an IME does (so pages
+     * see real input events). Returns false when Gecko has no focused field; callers then fall
+     * back to the JS path.
+     */
+    fun commitTextToGecko(text: String): Boolean {
+        val session = geckoSession ?: return false
+        val connection = geckoInputConnection(session) ?: return false
+        session.textInput.getHandler(handler ?: android.os.Handler(android.os.Looper.getMainLooper())).post {
+            connection.commitText(text, 1)
+        }
+        return true
+    }
+
+    /** GeckoView: Backspace in the focused text field, like commitTextToGecko. */
+    fun sendBackspaceToGecko(): Boolean {
+        val session = geckoSession ?: return false
+        val connection = geckoInputConnection(session) ?: return false
+        session.textInput.getHandler(handler ?: android.os.Handler(android.os.Looper.getMainLooper())).post {
+            connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL))
+            connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DEL))
+        }
+        return true
+    }
+
+    // Null when no editable element has focus
+    private fun geckoInputConnection(session: GeckoSession): InputConnection? =
+            try {
+                session.textInput.onCreateInputConnection(EditorInfo())
+            } catch (e: Exception) {
+                Log.w("GeckoEngine", "No input connection", e)
+                null
+            }
 
     private fun activeTabBlocksTouch(event: MotionEvent): Boolean =
             webView.touchListener?.onTouch(webView, event) == true
