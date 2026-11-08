@@ -766,6 +766,21 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         return true
     }
 
+    /** GeckoView: empties the focused text field, like commitTextToGecko. */
+    fun clearTextInGecko(): Boolean {
+        val session = geckoView?.session ?: geckoSession ?: return false
+        val connection = geckoInputConnection(session) ?: return false
+        session.textInput.getHandler(handler ?: android.os.Handler(android.os.Looper.getMainLooper())).post {
+            val before = connection.getTextBeforeCursor(1_000_000, 0)?.length ?: 0
+            val after = connection.getTextAfterCursor(1_000_000, 0)?.length ?: 0
+            connection.beginBatchEdit()
+            connection.finishComposingText()
+            connection.deleteSurroundingText(before, after)
+            connection.endBatchEdit()
+        }
+        return true
+    }
+
     // Null when no editable element has focus. Gecko drops the field's input connection when the
     // GeckoView loses Android focus (the keyboard opening can do it): take focus back and retry.
     private fun geckoInputConnection(session: GeckoSession): InputConnection? {
@@ -5665,6 +5680,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     fun sendBackspaceToChatInput() {
         if (!isChatVisible()) return
         chatView.sendBackspaceToFocusedInput()
+    }
+
+    fun clearChatInput() {
+        if (!isChatVisible()) return
+        chatView.clearFocusedInput()
     }
 
     fun sendEnterToChatInput() {

@@ -508,11 +508,15 @@ class MainActivity :
     }
 
     // The glasses' top button (Glasses Tweaks' launcher hook, when its switch is on): a tap
-    // starts or stops voice typing, like the mic button. Only the system uid can send it.
+    // starts or stops voice typing, like the mic button; a long press empties the text box
+    // being typed in. Only the system uid can send it.
     private val topButtonReceiver =
             object : BroadcastReceiver() {
                 override fun onReceive(context: Context?, intent: Intent?) {
-                    if (intent?.getStringExtra("press") == "tap") onMicrophonePressed()
+                    when (intent?.getStringExtra("press")) {
+                        "tap" -> onMicrophonePressed()
+                        "long" -> clearFocusedText()
+                    }
                 }
             }
 
@@ -2683,6 +2687,35 @@ class MainActivity :
         """
             ) { result -> DebugLog.d("InputDebug", "JavaScript result: $result") }
         }
+    }
+
+    /** Empties the text box being typed in: same targets, in the same order, as voice input. */
+    private fun clearFocusedText() {
+        val input = dualWebViewGroup.getDialogInput()
+        when {
+            dualWebViewGroup.urlEditText.visibility == View.VISIBLE ->
+                    dualWebViewGroup.setLinkText("", 0)
+            input != null -> input.setText("")
+            dualWebViewGroup.isChatVisible() -> dualWebViewGroup.clearChatInput()
+            dualWebViewGroup.clearTextInGecko() -> {}
+            else -> webView.evaluateJavascript(
+                    """
+        (function() {
+            var el = document.activeElement;
+            if (!el) return;
+            if ('value' in el) {
+                el.value = '';
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+            } else if (el.isContentEditable) {
+                document.execCommand('selectAll', false);
+                document.execCommand('delete', false);
+            }
+        })();
+        """.trimIndent(),
+                    null
+            )
+        }
+        dualWebViewGroup.showToast("Cleared")
     }
 
     private fun sendBackspaceToWebView() {

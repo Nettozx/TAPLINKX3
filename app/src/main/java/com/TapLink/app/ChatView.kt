@@ -313,6 +313,21 @@ class ChatView @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
         )
     }
 
+    /** Empties the chat input (the glasses' top button, long press). */
+    fun clearFocusedInput() {
+        webView.evaluateJavascript(
+                """
+            (function() {
+                var el = document.getElementById('chatInput');
+                if (!el) return;
+                el.value = '';
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+            })();
+        """.trimIndent(),
+                null
+        )
+    }
+
     fun sendEnterToFocusedInput() {
         webView.evaluateJavascript(
                 """
