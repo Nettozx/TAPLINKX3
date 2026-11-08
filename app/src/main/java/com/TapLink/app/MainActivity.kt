@@ -507,6 +507,15 @@ class MainActivity :
         isTouchScrollActive = false
     }
 
+    // The glasses' top button (Glasses Tweaks' launcher hook, when its switch is on): a tap
+    // starts or stops voice typing, like the mic button. Only the system uid can send it.
+    private val topButtonReceiver =
+            object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    if (intent?.getStringExtra("press") == "tap") onMicrophonePressed()
+                }
+            }
+
     private val notificationReceiver =
             object : BroadcastReceiver() {
                 override fun onReceive(context: Context?, intent: Intent?) {
@@ -1418,6 +1427,11 @@ class MainActivity :
         } catch (e: IllegalArgumentException) {
             // Receiver not registered
         }
+        try {
+            unregisterReceiver(topButtonReceiver)
+        } catch (e: IllegalArgumentException) {
+            // Receiver not registered
+        }
 
         sensorManager.unregisterListener(sensorEventListener)
         stopGpsUpdates()
@@ -1450,6 +1464,14 @@ class MainActivity :
                 notificationReceiver,
                 filter,
                 ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        ContextCompat.registerReceiver(
+                this,
+                topButtonReceiver,
+                IntentFilter("com.rayneosettings.action.TOP_BUTTON"),
+                "android.permission.INJECT_EVENTS",
+                null,
+                ContextCompat.RECEIVER_EXPORTED
         )
 
         // Restart mirroring to right eye
