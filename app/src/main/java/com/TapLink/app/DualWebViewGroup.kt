@@ -1435,7 +1435,12 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 setBackgroundColor(Color.BLACK) // Set background to ensure proper rendering
             }
 
-    fun updateUiScale(scale: Float) {
+    /**
+     * The right eye is drawn shifted (rightEyeShift), which would push its edge off the display:
+     * keep the picture small enough to leave a margin as wide as the shift on each side.
+     */
+    fun updateUiScale(requested: Float) {
+        val scale = minOf(requested, 1f - 2f * kotlin.math.abs(rightEyeShift()) / 640f)
         uiScale = scale
 
         // Set pivot point to center (320, 240) so scaling happens around the center
