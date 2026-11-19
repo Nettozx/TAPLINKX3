@@ -437,6 +437,22 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 GeckoSession().apply {
                     navigationDelegate =
                             object : GeckoSession.NavigationDelegate {
+                                // A page opening a new window (Messenger's call window, sign-in
+                                // pop-ups): give Gecko a session for it and show it over the page,
+                                // like an add-on popup. Back, or the window closing itself,
+                                // returns to the page. Without this the window never loads.
+                                override fun onNewSession(
+                                        session: GeckoSession,
+                                        uri: String
+                                ): GeckoResult<GeckoSession>? {
+                                    Log.d("GeckoEngine", "page opened a window: $uri")
+                                    val popup = GeckoSession(session.settings)
+                                    popup.permissionDelegate = geckoPermissionDelegate
+                                    // Gecko opens the session after we return it; show it then.
+                                    post { showExtensionPopupSession(popup) }
+                                    return GeckoResult.fromValue(popup)
+                                }
+
                                 override fun onLocationChange(
                                         session: GeckoSession,
                                         url: String?,
