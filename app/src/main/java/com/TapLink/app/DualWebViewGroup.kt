@@ -584,7 +584,24 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     }
 
     /** Shows [tab]'s page in the GeckoView: called whenever the active window changes. */
+    /**
+     * Desktop mode also has to tell sites it's a desktop browser (Gecko's desktop user agent):
+     * with the phone one, sites like Messenger offer their app instead of calls. Reloads the
+     * page when the mode changed for this tab.
+     */
+    private fun syncUserAgent(tab: GeckoTab?) {
+        val session = tab?.session ?: return
+        val wanted =
+                if (isDesktopMode) org.mozilla.geckoview.GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
+                else org.mozilla.geckoview.GeckoSessionSettings.USER_AGENT_MODE_MOBILE
+        if (session.settings.userAgentMode != wanted) {
+            session.settings.userAgentMode = wanted
+            if (session.isOpen) session.reload()
+        }
+    }
+
     private fun showGeckoTab(tab: GeckoTab?) {
+        syncUserAgent(tab)
         val gecko = geckoView ?: return
         if (tab == null || tab === currentGeckoTab) return
         closeExtensionPopup()
@@ -5864,6 +5881,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // "mobile"}")
 
         isDesktopMode = isDesktop
+        syncUserAgent(currentGeckoTab)
 
         // Step 1: Update WebView settings (user agent)
         // If on Netflix, we preserve the current UA (which should be the system default) to prevent
