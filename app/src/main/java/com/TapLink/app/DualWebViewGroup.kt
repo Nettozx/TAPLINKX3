@@ -476,6 +476,17 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                                         post { showToast("That needs an Android app; staying on this page", 2500L) }
                                         return GeckoResult.fromValue(AllowOrDeny.DENY)
                                     }
+                                    // A window a script opens empty and then fills (Messenger's
+                                    // call window), or a call page: let Gecko open it as a real
+                                    // window (onNewSession). Loading it here gave a blank page.
+                                    if (request.target == GeckoSession.NavigationDelegate.TARGET_WINDOW_NEW &&
+                                                    (uri.isBlank() ||
+                                                            uri == "about:blank" ||
+                                                            uri.contains("/groupcall/") ||
+                                                            uri.contains("/videocall/"))
+                                    ) {
+                                        return null
+                                    }
                                     // Links that ask for a new window open in this window's page
                                     if (request.target == GeckoSession.NavigationDelegate.TARGET_WINDOW_NEW) {
                                         session.loadUri(request.uri)
