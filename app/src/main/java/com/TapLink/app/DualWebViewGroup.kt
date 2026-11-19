@@ -600,6 +600,21 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
     }
 
+    /** Pixels to move the right eye's picture (+ = right): Glasses Tweaks' viewer setting. */
+    private fun rightEyeShift(): Int =
+            try {
+                android.provider.Settings.Global.getString(
+                                context.contentResolver,
+                                "glasses_viewer_right_eye_shift"
+                        )
+                        ?.trim()
+                        ?.toInt()
+                        ?.coerceIn(-64, 64)
+                        ?: 0
+            } catch (e: Exception) {
+                0
+            }
+
     private fun showGeckoTab(tab: GeckoTab?) {
         syncUserAgent(tab)
         val gecko = geckoView ?: return
@@ -4765,8 +4780,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 eyeHeight
         )
 
-        // Position SurfaceView exactly like WebView but offset horizontally for right eye
-        rightEyeView.layout(eyeWidth, 0, eyeWidth * 2, eyeHeight)
+        // Position SurfaceView exactly like WebView but offset horizontally for right eye,
+        // plus the wearer's right-eye shift (set in Glasses Tweaks) so both eyes line up.
+        val shift = rightEyeShift()
+        rightEyeView.layout(eyeWidth + shift, 0, eyeWidth * 2 + shift, eyeHeight)
 
         // Layout toggle bar - height is eyeHeight minus navBarHeight
         leftToggleBar.layout(0, 0, toggleBarWidth, eyeHeight - navBarHeight)
