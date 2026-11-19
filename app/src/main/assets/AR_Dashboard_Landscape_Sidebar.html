@@ -598,6 +598,7 @@
       // whatsapp: { name: 'WhatsApp', url: 'https://web.whatsapp.com' },
       // instagram: { name: 'Instagram', url: 'https://www.instagram.com' },
       reddit: { name: 'Reddit', url: 'https://www.reddit.com' },
+      messenger: { name: 'Messenger', url: 'https://www.messenger.com' },
       // telegram: { name: 'Telegram', url: 'https://web.telegram.org' },
       // tiktok: { name: 'TikTok', url: 'https://www.tiktok.com' },
 
@@ -665,7 +666,7 @@
     const defaultGroups = [
       { title: 'Navigation / Entertainment', cls: 'sec-nav', keys: ['youtube', 'gmaps'] },
       { title: 'AI / Chatbots', cls: 'sec-llm', keys: ['gemini', 'chatgpt', 'claude'] },
-      { title: 'Social / Communication', cls: 'sec-social', keys: ['reddit'] },
+      { title: 'Social / Communication', cls: 'sec-social', keys: ['reddit', 'messenger'] },
       { title: 'Utilities / Reference', cls: 'sec-util', keys: ['translate'] },
       { title: 'Custom Links', cls: 'sec-custom', keys: ['slickdeals', 'gvoice'] }
     ];
@@ -682,7 +683,7 @@
       'grok', 'wikipedia', 'wolfram', 'suno', 'udio', 'stableaudio', 'runway', 'pika', 'luma',
       'elevenlabs', 'playht'
     ];
-    const addedDefaultApps = ['slickdeals', 'gvoice'];
+    const addedDefaultApps = ['slickdeals', 'gvoice', 'messenger'];
 
     function normalizeTitle(value) {
       if (!value) return '';
